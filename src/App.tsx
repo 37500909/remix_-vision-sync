@@ -313,35 +313,35 @@ class ProceduralMusicEngine {
 }
 
 const VIBE_MAP: Record<string, string> = {
-  person: "ethereal ambient drone, calm",
-  'cell phone': "cyberpunk synthwave, electronic",
-  laptop: "cyberpunk synthwave, electronic",
-  tv: "cyberpunk synthwave, electronic",
-  cup: "coffee shop jazz, chill acoustic",
-  bottle: "coffee shop jazz, chill acoustic",
-  bowl: "coffee shop jazz, chill acoustic",
-  cat: "playful acoustic guitar, happy melody",
-  dog: "playful acoustic guitar, happy melody",
-  bird: "playful acoustic guitar, happy melody",
-  car: "driving rock beat, fast tempo",
-  bus: "driving rock beat, fast tempo",
-  truck: "driving rock beat, fast tempo",
-  chair: "ambient drone, relaxing",
-  couch: "ambient drone, relaxing",
-  bed: "ambient drone, relaxing",
-  'potted plant': "ethereal flute, ambient nature",
-  book: "classical piano, focused",
+  person: "zumbido ambiental etéreo, tranquilo",
+  'cell phone': "synthwave cyberpunk, electrónico",
+  laptop: "synthwave cyberpunk, electrónico",
+  tv: "synthwave cyberpunk, electrónico",
+  cup: "jazz de cafetería, acústico relajado",
+  bottle: "jazz de cafetería, acústico relajado",
+  bowl: "jazz de cafetería, acústico relajado",
+  cat: "guitarra acústica juguetona, melodía alegre",
+  dog: "guitarra acústica juguetona, melodía alegre",
+  bird: "guitarra acústica juguetona, melodía alegre",
+  car: "ritmo de rock dinámico, tempo rápido",
+  bus: "ritmo de rock dinámico, tempo rápido",
+  truck: "ritmo de rock dinámico, tempo rápido",
+  chair: "zumbido ambiental, relajante",
+  couch: "zumbido ambiental, relajante",
+  bed: "zumbido ambiental, relajante",
+  'potted plant': "flauta etérea, naturaleza ambiental",
+  book: "piano clásico, enfocado",
 };
 
 function getVibeForObjects(objects: string[]) {
-  if (objects.length === 0) return "minimalist ambient drone, quiet";
+  if (objects.length === 0) return "zumbido ambiental minimalista, silencioso";
   
   const vibes = new Set<string>();
   for (const obj of objects) {
     if (VIBE_MAP[obj]) {
       vibes.add(VIBE_MAP[obj]);
     } else {
-      vibes.add("chill lofi beat");
+      vibes.add("ritmo lofi relajado");
     }
   }
   
@@ -351,17 +351,19 @@ function getVibeForObjects(objects: string[]) {
 const getVibeFromGemini = async (objects: string[], emotion: string, userIdentity: string = 'User'): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
-    const nameStr = userIdentity !== 'Unknown' ? `named ${userIdentity}` : 'User';
-    const prompt = `You are a soundscape generator. Based on the following scene, output a 3-5 word ambient soundscape description (e.g., 'tribal rhythmic drone', 'cyberpunk electronic drone' or 'melancholy acoustic ambient'). Do not include any other text. Never output 'pop', 'upbeat', or 'energetic'. Everything must be ambient. Scene: A person ${nameStr} is feeling ${emotion} and the following objects are visible: ${objects.length > 0 ? objects.join(', ') : 'none'}.`;
+    const nameStr = userIdentity !== 'Unknown' ? `llamada ${userIdentity}` : 'desconocida';
+    const SpanishEmotion = translateEmotion(emotion);
+    const prompt = `Eres un generador de paisajes sonoros. Basándote en la siguiente escena, genera una descripción de paisaje sonoro ambiental de 3 a 5 palabras en español (por ejemplo, 'zumbido rítmico tribal', 'zumbido electrónico cyberpunk' o 'ambiente acústico melancólico'). No incluyas ningún otro texto. Nunca devuelvas 'pop', 'alegre' o 'enérgico'. Todo debe ser ambiental. Escena: Una persona ${nameStr} se siente ${SpanishEmotion} y los siguientes objetos son visibles: ${objects.length > 0 ? objects.join(', ') : 'ninguno'}.`;
     const response = await ai.models.generateContent({
       model: 'gemini-flash-lite-latest',
       contents: prompt,
     });
-    return response.text?.trim() || "ambient drone, relaxing";
+    return response.text?.trim() || "zumbido ambiental, relajante";
   } catch (e: any) {
     console.warn("Gemini API error (falling back to local vibe map):", e.message || e);
-    const nameStr = userIdentity !== 'Unknown' ? `user ${userIdentity}` : 'user';
-    return getVibeForObjects(objects) + `, ${nameStr} ${emotion} mood`;
+    const nameStr = userIdentity !== 'Unknown' ? `usuario ${userIdentity}` : 'usuario';
+    const SpanishEmotion = translateEmotion(emotion);
+    return getVibeForObjects(objects) + `, estado de ánimo ${SpanishEmotion} del ${nameStr}`;
   }
 };
 
@@ -432,11 +434,26 @@ function getConstellationPoints(identity: string, timeSeed: number = 0): Constel
   return points;
 }
 
+const translateEmotion = (emotion: string): string => {
+  const map: Record<string, string> = {
+    'happy': 'feliz',
+    'sadness': 'tristeza',
+    'sad': 'tristeza',
+    'surprised': 'sorprendido',
+    'surprise': 'sorprendido',
+    'angry': 'enojado',
+    'fear': 'miedo',
+    'disgust': 'disgustado',
+    'neutral': 'neutral'
+  };
+  return map[emotion.toLowerCase()] || emotion;
+};
+
 export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [status, setStatus] = useState('Loading Object Detection Model...');
-  const [currentPrompt, setCurrentPrompt] = useState('Waiting for camera...');
+  const [status, setStatus] = useState('Cargando modelo de detección de objetos...');
+  const [currentPrompt, setCurrentPrompt] = useState('Esperando cámara...');
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
@@ -463,6 +480,8 @@ export default function App() {
   const [loggedInDni, setLoggedInDni] = useState<string | null>(null);
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
   const [activeUsers, setActiveUsers] = useState<{ name: string; dni: string }[]>([]);
+  const [detectedFaces, setDetectedFaces] = useState<any[]>([]);
+  const [selectedFace, setSelectedFace] = useState<{ x: number; y: number; w: number; h: number; image: string } | null>(null);
 
   const fetchLogs = async () => {
     try {
@@ -481,6 +500,7 @@ export default function App() {
   const identityRef = useRef<string>('Unknown');
   const deepFaceBoxesRef = useRef<{ x: number; y: number; w: number; h: number; identity: string; dni: string; age: number; gender: string; emotion: string; opacity: number }[]>([]);
   const lastDeepFaceTimeRef = useRef<number>(0);
+  const localFaceDetectedRef = useRef<boolean>(false);
 
   useEffect(() => {
     analysisEngineRef.current = analysisEngine;
@@ -493,6 +513,8 @@ export default function App() {
       identityRef.current = 'Unknown';
       setIsFaceDetected(false);
       deepFaceBoxesRef.current = [];
+      setDetectedFaces([]);
+      setSelectedFace(null);
     }
   }, [analysisEngine]);
   
@@ -558,10 +580,10 @@ export default function App() {
         faceLandmarkerRef.current = faceLandmarker;
 
         setIsModelLoaded(true);
-        setStatus('Idle');
+        setStatus('Inactivo');
       } catch (err: any) {
         console.error("Failed to load models:", err);
-        setStatus('Error loading models');
+        setStatus('Error al cargar modelos');
         setErrorMsg(err.message);
       }
     };
@@ -712,10 +734,13 @@ export default function App() {
         
         let currentEmotion = "neutral";
         let currentBlendshapes = { smile: 0, frown: 0, mouthOpen: 0, browRaise: 0, eyeBlink: 0, pucker: 0 };
-        
-        if (analysisEngineRef.current === 'mediapipe') {
-          if (faceLandmarkerRef.current) {
-            const faceResult = faceLandmarkerRef.current.detectForVideo(video, performance.now());
+        let localFaceDetected = false;
+
+        if (faceLandmarkerRef.current) {
+          const faceResult = faceLandmarkerRef.current.detectForVideo(video, performance.now());
+          
+          if (faceResult.faceLandmarks && faceResult.faceLandmarks.length > 0) {
+            localFaceDetected = true;
             
             // Draw Face Mesh Point Cloud on secondary canvas
             if (faceCanvasRef.current) {
@@ -724,46 +749,44 @@ export default function App() {
               if (fCtx) {
                 fCtx.clearRect(0, 0, fCanvas.width, fCanvas.height);
                 
-                if (faceResult.faceLandmarks && faceResult.faceLandmarks.length > 0) {
-                  const time = performance.now() / 1500; // 1.5 seconds per cycle
-                  
-                  // Find bounding box of face to center it
-                  let minX = video.videoWidth, maxX = 0, minY = video.videoHeight, maxY = 0;
-                  for (const pt of faceResult.faceLandmarks[0]) {
-                    const px = pt.x * video.videoWidth;
-                    const py = pt.y * video.videoHeight;
-                    if (px < minX) minX = px;
-                    if (px > maxX) maxX = px;
-                    if (py < minY) minY = py;
-                    if (py > maxY) maxY = py;
-                  }
-                  const faceWidth = maxX - minX;
-                  const faceHeight = maxY - minY;
-                  const centerX = minX + faceWidth / 2;
-                  const centerY = minY + faceHeight / 2;
-                  
-                  const scanY = minY + ((Math.sin(time) + 1) / 2) * faceHeight;
-                  const scale = Math.min(fCanvas.width / faceWidth, fCanvas.height / faceHeight) * 0.8;
+                const time = performance.now() / 1500; // 1.5 seconds per cycle
+                
+                // Find bounding box of face to center it
+                let minX = video.videoWidth, maxX = 0, minY = video.videoHeight, maxY = 0;
+                for (const pt of faceResult.faceLandmarks[0]) {
+                  const px = pt.x * video.videoWidth;
+                  const py = pt.y * video.videoHeight;
+                  if (px < minX) minX = px;
+                  if (px > maxX) maxX = px;
+                  if (py < minY) minY = py;
+                  if (py > maxY) maxY = py;
+                }
+                const faceWidth = maxX - minX;
+                const faceHeight = maxY - minY;
+                const centerX = minX + faceWidth / 2;
+                const centerY = minY + faceHeight / 2;
+                
+                const scanY = minY + ((Math.sin(time) + 1) / 2) * faceHeight;
+                const scale = Math.min(fCanvas.width / faceWidth, fCanvas.height / faceHeight) * 0.8;
 
-                  for (const pt of faceResult.faceLandmarks[0]) {
-                    const px = pt.x * video.videoWidth;
-                    const py = pt.y * video.videoHeight;
-                    
-                    // Distance from scan line (in pixels)
-                    const dist = Math.abs(py - scanY) / faceHeight;
-                    // Opacity: high near scan line, low elsewhere
-                    const opacity = Math.max(0.15, 1.0 - dist * 4); 
-                    
-                    fCtx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-                    fCtx.beginPath();
-                    
-                    // Map to canvas
-                    const drawX = fCanvas.width/2 + (px - centerX) * scale;
-                    const drawY = fCanvas.height/2 + (py - centerY) * scale;
-                    
-                    fCtx.arc(drawX, drawY, 1.5, 0, 2 * Math.PI);
-                    fCtx.fill();
-                  }
+                for (const pt of faceResult.faceLandmarks[0]) {
+                  const px = pt.x * video.videoWidth;
+                  const py = pt.y * video.videoHeight;
+                  
+                  // Distance from scan line (in pixels)
+                  const dist = Math.abs(py - scanY) / faceHeight;
+                  // Opacity: high near scan line, low elsewhere
+                  const opacity = Math.max(0.15, 1.0 - dist * 4); 
+                  
+                  fCtx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                  fCtx.beginPath();
+                  
+                  // Map to canvas
+                  const drawX = fCanvas.width/2 + (px - centerX) * scale;
+                  const drawY = fCanvas.height/2 + (py - centerY) * scale;
+                  
+                  fCtx.arc(drawX, drawY, 1.5, 0, 2 * Math.PI);
+                  fCtx.fill();
                 }
               }
             }
@@ -804,135 +827,149 @@ export default function App() {
             }
 
             // Draw arrows and blurred line on main canvas
-            if (faceResult.faceLandmarks && faceResult.faceLandmarks.length > 0) {
-              const landmarks = faceResult.faceLandmarks[0];
-              
-              // Draw blurred line scanning over the face every 40 seconds
-              const scanTime = performance.now() / 40000; // 40 seconds
-              const scanPhase = scanTime % 1; // 0 to 1
-              
-              let minX = 1, maxX = 0, minY = 1, maxY = 0;
-              for (const pt of landmarks) {
-                if (pt.x < minX) minX = pt.x;
-                if (pt.x > maxX) maxX = pt.x;
-                if (pt.y < minY) minY = pt.y;
-                if (pt.y > maxY) maxY = pt.y;
-              }
-              
-              // Oscillate the scan line up and down
-              const scanProgress = (Math.sin(scanPhase * Math.PI * 2) + 1) / 2; // 0 to 1 to 0
-              const scanY = minY + scanProgress * (maxY - minY);
-              
-              // Opacity: 0 at top/bottom, 0.3 in the middle
-              const lineOpacity = Math.sin(scanProgress * Math.PI) * 0.3;
-              
-              ctx.save();
-              
-              // Clip to face oval
-              const faceOvalIndices = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-              ctx.beginPath();
-              for (let i = 0; i < faceOvalIndices.length; i++) {
-                const pt = landmarks[faceOvalIndices[i]];
-                if (i === 0) ctx.moveTo(pt.x * canvas.width, pt.y * canvas.height);
-                else ctx.lineTo(pt.x * canvas.width, pt.y * canvas.height);
-              }
-              ctx.closePath();
-              ctx.clip();
+            const landmarks = faceResult.faceLandmarks[0];
+            
+            // Draw blurred line scanning over the face every 40 seconds
+            const scanTime = performance.now() / 40000; // 40 seconds
+            const scanPhase = scanTime % 1; // 0 to 1
+            
+            let minX = 1, maxX = 0, minY = 1, maxY = 0;
+            for (const pt of landmarks) {
+              if (pt.x < minX) minX = pt.x;
+              if (pt.x > maxX) maxX = pt.x;
+              if (pt.y < minY) minY = pt.y;
+              if (pt.y > maxY) maxY = pt.y;
+            }
+            
+            // Oscillate the scan line up and down
+            const scanProgress = (Math.sin(scanPhase * Math.PI * 2) + 1) / 2; // 0 to 1 to 0
+            const scanY = minY + scanProgress * (maxY - minY);
+            
+            // Opacity: 0 at top/bottom, 0.3 in the middle
+            const lineOpacity = Math.sin(scanProgress * Math.PI) * 0.3;
+            
+            ctx.save();
+            
+            // Clip to face oval
+            const faceOvalIndices = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            ctx.beginPath();
+            for (let i = 0; i < faceOvalIndices.length; i++) {
+              const pt = landmarks[faceOvalIndices[i]];
+              if (i === 0) ctx.moveTo(pt.x * canvas.width, pt.y * canvas.height);
+              else ctx.lineTo(pt.x * canvas.width, pt.y * canvas.height);
+            }
+            ctx.closePath();
+            ctx.clip();
 
-              if (lineOpacity > 0.01) {
-                // 1. Draw the actual face landmarks illuminated by the scanner
-                // This gives a highly realistic 3D contour effect without wacky math
-                ctx.fillStyle = '#ffffff'; // White glow
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 10;
+            if (lineOpacity > 0.01) {
+              // 1. Draw the actual face landmarks illuminated by the scanner
+              ctx.fillStyle = '#ffffff'; // White glow
+              ctx.shadowColor = '#ffffff';
+              ctx.shadowBlur = 10;
+              
+              for (const pt of landmarks) {
+                // Calculate vertical distance from the scan line
+                const dist = Math.abs(pt.y - scanY);
+                const threshold = 0.04; // How thick the illuminated band is
                 
-                for (const pt of landmarks) {
-                  // Calculate vertical distance from the scan line
-                  const dist = Math.abs(pt.y - scanY);
-                  const threshold = 0.04; // How thick the illuminated band is
+                if (dist < threshold) {
+                  // Opacity falls off as points get further from the scan line
+                  const ptOpacity = (1 - (dist / threshold)) * lineOpacity * 2;
+                  ctx.globalAlpha = Math.min(ptOpacity, 1);
                   
-                  if (dist < threshold) {
-                    // Opacity falls off as points get further from the scan line
-                    const ptOpacity = (1 - (dist / threshold)) * lineOpacity * 2;
-                    ctx.globalAlpha = Math.min(ptOpacity, 1);
-                    
-                    ctx.beginPath();
-                    ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 1.5, 0, Math.PI * 2);
-                    ctx.fill();
-                  }
+                  ctx.beginPath();
+                  ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 1.5, 0, Math.PI * 2);
+                  ctx.fill();
                 }
-                ctx.globalAlpha = 1.0;
               }
+              ctx.globalAlpha = 1.0;
+            }
+            
+            ctx.restore();
+
+            // Draw stylized feature highlights based on emotion
+            const drawFeatureHighlight = (x: number, y: number, label: string, intensity: number) => {
+              if (isNaN(intensity) || intensity < 0.05) return;
+              ctx.save();
+              ctx.translate(x * canvas.width, y * canvas.height);
+              
+              const size = 5 + intensity * 15;
+              
+              ctx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.8})`;
+              ctx.lineWidth = 1.5;
+              
+              // Draw brackets [ ]
+              ctx.beginPath();
+              ctx.moveTo(-size, -size/2);
+              ctx.lineTo(-size, -size);
+              ctx.lineTo(-size/2, -size);
+              
+              ctx.moveTo(size, -size/2);
+              ctx.lineTo(size, -size);
+              ctx.lineTo(size/2, -size);
+              
+              ctx.moveTo(-size, size/2);
+              ctx.lineTo(-size, size);
+              ctx.lineTo(-size/2, size);
+              
+              ctx.moveTo(size, size/2);
+              ctx.lineTo(size, size);
+              ctx.lineTo(size/2, size);
+              ctx.stroke();
+              
+              // Center dot
+              ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`;
+              ctx.beginPath();
+              ctx.arc(0, 0, 2, 0, Math.PI * 2);
+              ctx.fill();
+              
+              // Label
+              ctx.fillStyle = `rgba(255, 255, 255, ${intensity * 0.9})`;
+              ctx.font = '10px monospace';
+              ctx.fillText(label, size + 5, 3);
               
               ctx.restore();
+            };
 
-              // Draw stylized feature highlights based on emotion
-              const drawFeatureHighlight = (x: number, y: number, label: string, intensity: number) => {
-                if (isNaN(intensity) || intensity < 0.05) return;
-                ctx.save();
-                ctx.translate(x * canvas.width, y * canvas.height);
-                
-                const size = 5 + intensity * 15;
-                
-                ctx.strokeStyle = `rgba(255, 255, 255, ${intensity * 0.8})`;
-                ctx.lineWidth = 1.5;
-                
-                // Draw brackets [ ]
-                ctx.beginPath();
-                ctx.moveTo(-size, -size/2);
-                ctx.lineTo(-size, -size);
-                ctx.lineTo(-size/2, -size);
-                
-                ctx.moveTo(size, -size/2);
-                ctx.lineTo(size, -size);
-                ctx.lineTo(size/2, -size);
-                
-                ctx.moveTo(-size, size/2);
-                ctx.lineTo(-size, size);
-                ctx.lineTo(-size/2, size);
-                
-                ctx.moveTo(size, size/2);
-                ctx.lineTo(size, size);
-                ctx.lineTo(size/2, size);
-                ctx.stroke();
-                
-                // Center dot
-                ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`;
-                ctx.beginPath();
-                ctx.arc(0, 0, 2, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Label
-                ctx.fillStyle = `rgba(255, 255, 255, ${intensity * 0.9})`;
-                ctx.font = '10px monospace';
-                ctx.fillText(label, size + 5, 3);
-                
-                ctx.restore();
-              };
+            const smoothed = smoothedBlendshapesRef.current;
+            drawFeatureHighlight(landmarks[61].x, landmarks[61].y, 'SONRISA_I', smoothed.smile);
+            drawFeatureHighlight(landmarks[291].x, landmarks[291].y, 'SONRISA_D', smoothed.smile);
+            
+            drawFeatureHighlight(landmarks[61].x, landmarks[61].y, 'CEÑO_I', smoothed.frown);
+            drawFeatureHighlight(landmarks[291].x, landmarks[291].y, 'CEÑO_D', smoothed.frown);
+            
+            drawFeatureHighlight(landmarks[52].x, landmarks[52].y, 'CEJA_I', smoothed.browRaise);
+            drawFeatureHighlight(landmarks[282].x, landmarks[282].y, 'CEJA_D', smoothed.browRaise);
+            
+            drawFeatureHighlight(landmarks[152].x, landmarks[152].y, 'BOCA_ABIERTA', smoothed.mouthOpen);
+            
+            drawFeatureHighlight(landmarks[13].x, landmarks[13].y, 'CEÑO_BOCA', smoothed.pucker);
+            
+            drawFeatureHighlight(landmarks[159].x, landmarks[159].y, 'PARPADEO_I', smoothed.eyeBlink);
+            drawFeatureHighlight(landmarks[386].x, landmarks[386].y, 'PARPADEO_D', smoothed.eyeBlink);
+          }
+        }
 
-              const smoothed = smoothedBlendshapesRef.current;
-              drawFeatureHighlight(landmarks[61].x, landmarks[61].y, 'SMILE_L', smoothed.smile);
-              drawFeatureHighlight(landmarks[291].x, landmarks[291].y, 'SMILE_R', smoothed.smile);
-              
-              drawFeatureHighlight(landmarks[61].x, landmarks[61].y, 'FROWN_L', smoothed.frown);
-              drawFeatureHighlight(landmarks[291].x, landmarks[291].y, 'FROWN_R', smoothed.frown);
-              
-              drawFeatureHighlight(landmarks[52].x, landmarks[52].y, 'BROW_L', smoothed.browRaise);
-              drawFeatureHighlight(landmarks[282].x, landmarks[282].y, 'BROW_R', smoothed.browRaise);
-              
-              drawFeatureHighlight(landmarks[152].x, landmarks[152].y, 'JAW_OPEN', smoothed.mouthOpen);
-              
-              drawFeatureHighlight(landmarks[13].x, landmarks[13].y, 'PUCKER', smoothed.pucker);
-              
-              drawFeatureHighlight(landmarks[159].x, landmarks[159].y, 'BLINK_L', smoothed.eyeBlink);
-              drawFeatureHighlight(landmarks[386].x, landmarks[386].y, 'BLINK_R', smoothed.eyeBlink);
+        // Set the ref so async fetch callbacks can read it
+        localFaceDetectedRef.current = localFaceDetected;
+
+        if (analysisEngineRef.current === 'mediapipe') {
+          // In MediaPipe mode, we already finished tracking and rendering!
+          if (!localFaceDetected && faceCanvasRef.current) {
+            const fCanvas = faceCanvasRef.current;
+            const fCtx = fCanvas.getContext('2d');
+            if (fCtx) {
+              fCtx.clearRect(0, 0, fCanvas.width, fCanvas.height);
             }
           }
         } else if (analysisEngineRef.current === 'deepface') {
-          currentEmotion = deepFaceEmotionRef.current || "neutral";
-          currentBlendshapes = { ...smoothedBlendshapesRef.current };
+          // If we didn't detect a face locally, use the server-estimated values (which were set in the background fetch callback)
+          if (!localFaceDetected) {
+            currentEmotion = deepFaceEmotionRef.current || "neutral";
+            currentBlendshapes = { ...smoothedBlendshapesRef.current };
+          }
 
-          // Trigger DeepFace processing asynchronously
+          // Trigger DeepFace processing asynchronously every 750ms
           const nowMs = performance.now();
           if (nowMs - lastDeepFaceTimeRef.current > 750) {
             lastDeepFaceTimeRef.current = nowMs;
@@ -962,6 +999,15 @@ export default function App() {
                     .map((face: any) => ({ name: face.identity, dni: face.dni }));
                   setActiveUsers(detectedUsers);
                   
+                  setDetectedFaces(data.results.map((face: any) => ({
+                    box: face.box,
+                    identity: face.identity,
+                    dni: face.dni,
+                    age: face.age,
+                    gender: face.dominant_gender,
+                    emotion: face.dominant_emotion
+                  })));
+                  
                   // Set primary log in user as the first recognized user, if any
                   if (detectedUsers.length > 0) {
                     setLoggedInUser(detectedUsers[0].name);
@@ -981,13 +1027,15 @@ export default function App() {
                     gender: firstFace.dominant_gender
                   });
 
-                  // Update normalized values for sliders
-                  smoothedBlendshapesRef.current.smile = (firstFace.emotion.happy || 0) / 100;
-                  smoothedBlendshapesRef.current.frown = (firstFace.emotion.sad || 0) / 100;
-                  smoothedBlendshapesRef.current.mouthOpen = (firstFace.emotion.surprise || 0) / 100;
-                  smoothedBlendshapesRef.current.browRaise = ((firstFace.emotion.surprise || 0) + (firstFace.emotion.fear || 0)) / 200;
-                  smoothedBlendshapesRef.current.pucker = (firstFace.emotion.disgust || 0) / 100;
-                  smoothedBlendshapesRef.current.eyeBlink = 0.1;
+                  // Update normalized values for sliders ONLY if local tracking is not active
+                  if (!localFaceDetectedRef.current) {
+                    smoothedBlendshapesRef.current.smile = (firstFace.emotion.happy || 0) / 100;
+                    smoothedBlendshapesRef.current.frown = (firstFace.emotion.sad || 0) / 100;
+                    smoothedBlendshapesRef.current.mouthOpen = (firstFace.emotion.surprise || 0) / 100;
+                    smoothedBlendshapesRef.current.browRaise = ((firstFace.emotion.surprise || 0) + (firstFace.emotion.fear || 0)) / 200;
+                    smoothedBlendshapesRef.current.pucker = (firstFace.emotion.disgust || 0) / 100;
+                    smoothedBlendshapesRef.current.eyeBlink = 0.1;
+                  }
 
                   // Update deepFaceBoxesRef with all detected faces
                   deepFaceBoxesRef.current = data.results.map((face: any) => ({
@@ -1009,6 +1057,7 @@ export default function App() {
                   setLoggedInDni(null);
                   deepFaceEmotionRef.current = 'neutral';
                   setDemographics(null);
+                  setDetectedFaces([]);
                   
                   // Decrease opacity for all existing boxes
                   deepFaceBoxesRef.current = deepFaceBoxesRef.current
@@ -1023,12 +1072,13 @@ export default function App() {
                 setIsFaceDetected(false);
                 setIdentity('Unknown');
                 identityRef.current = 'Unknown';
+                setDetectedFaces([]);
               });
             }
           }
 
-          // Draw stylized mesh point cloud animation on the secondary canvas
-          if (faceCanvasRef.current) {
+          // Draw stylized mesh point cloud animation on the secondary canvas only if no local face is detected
+          if (faceCanvasRef.current && !localFaceDetected) {
             const fCanvas = faceCanvasRef.current;
             const fCtx = fCanvas.getContext('2d');
             if (fCtx) {
@@ -1100,12 +1150,23 @@ export default function App() {
             const { x, y, w, h, identity, dni, opacity } = box;
             
             const isUnknown = identity === 'Unknown';
-            // Glowing green for authorized (recognized), warning yellow for unrecognized
-            const boxColor = isUnknown ? `rgba(234, 179, 8, ${opacity})` : `rgba(74, 222, 128, ${opacity})`;
-            const bgBoxColor = isUnknown ? `rgba(234, 179, 8, ${opacity * 0.15})` : `rgba(74, 222, 128, ${opacity * 0.15})`;
             
+            // Check if this box is the selected one
+            const isSelected = selectedFace && 
+              Math.abs(selectedFace.x - x) < 20 && 
+              Math.abs(selectedFace.y - y) < 20;
+
+            // Glowing green for authorized (recognized), warning yellow for unrecognized, bright blue for selected
+            let boxColor = isUnknown ? `rgba(234, 179, 8, ${opacity})` : `rgba(74, 222, 128, ${opacity})`;
+            let bgBoxColor = isUnknown ? `rgba(234, 179, 8, ${opacity * 0.15})` : `rgba(74, 222, 128, ${opacity * 0.15})`;
+            
+            if (isSelected) {
+              boxColor = `rgba(59, 130, 246, ${opacity})`; // Blue
+              bgBoxColor = `rgba(59, 130, 246, ${opacity * 0.3})`;
+            }
+
             ctx.strokeStyle = boxColor;
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = isSelected ? 2.5 : 1.5;
             
             const cornerLength = Math.min(15, w / 4, h / 4);
             ctx.beginPath();
@@ -1125,11 +1186,25 @@ export default function App() {
             ctx.lineTo(x, y + h);
             ctx.lineTo(x, y + h - cornerLength);
             ctx.stroke();
+
+            // If selected, draw a dashed box connecting the corners as well
+            if (isSelected) {
+              ctx.save();
+              ctx.strokeStyle = `rgba(59, 130, 246, ${opacity * 0.5})`;
+              ctx.setLineDash([4, 4]);
+              ctx.strokeRect(x, y, w, h);
+              ctx.restore();
+            }
             
             // Draw name and DNI above the bounding box
             ctx.font = '700 9px "JetBrains Mono", monospace';
-            const labelText = isUnknown ? "SUJETO_NO_REGISTRADO" : identity.toUpperCase();
-            const subLabelText = isUnknown ? "ADVERTENCIA: NO AUTORIZADO" : `DNI: ${dni || 'S/D'}`;
+            let labelText = isUnknown ? "SUJETO_NO_REGISTRADO" : identity.toUpperCase();
+            let subLabelText = isUnknown ? "ADVERTENCIA: NO AUTORIZADO" : `DNI: ${dni || 'S/D'}`;
+            
+            if (isSelected) {
+              labelText = "REGISTRANDO SUJETO...";
+              subLabelText = "SELECCIONADO EN PANEL";
+            }
             
             const labelWidth = Math.max(ctx.measureText(labelText).width, ctx.measureText(subLabelText).width) + 12;
             const labelHeight = 28;
@@ -1149,7 +1224,7 @@ export default function App() {
             ctx.fillText(labelText, labelX + 6, labelY + 11);
             
             ctx.font = '400 8px "JetBrains Mono", monospace';
-            ctx.fillStyle = isUnknown ? `rgba(234, 179, 8, ${opacity * 0.8})` : `rgba(255, 255, 255, ${opacity * 0.8})`;
+            ctx.fillStyle = (isUnknown && !isSelected) ? `rgba(234, 179, 8, ${opacity * 0.8})` : isSelected ? `rgba(59, 130, 246, ${opacity * 0.8})` : `rgba(255, 255, 255, ${opacity * 0.8})`;
             ctx.fillText(subLabelText, labelX + 6, labelY + 22);
           });
         }
@@ -1354,8 +1429,8 @@ export default function App() {
     }
     pendingStateRef.current = null;
     
-    if (status === 'Connected & Playing' || status === 'Connecting to Lyria API...' || status.includes('Local Synth')) {
-      setStatus('Idle');
+    if (status === 'Conectado y Reproduciendo' || status === 'Conectando con la API de Lyria...' || status.includes('Sintetizador Local') || status.includes('Local Synth')) {
+      setStatus('Inactivo');
     }
     
     if (playerRef.current) {
@@ -1375,6 +1450,8 @@ export default function App() {
     smoothedBlendshapesRef.current = { smile: 0, frown: 0, mouthOpen: 0, browRaise: 0, eyeBlink: 0, pucker: 0 };
     smoothedBoxesRef.current.clear();
     deepFaceBoxesRef.current = [];
+    setDetectedFaces([]);
+    setSelectedFace(null);
     
     setInfoMsg(null);
 
@@ -1403,6 +1480,116 @@ export default function App() {
     }
   };
 
+  const selectFaceForRegistration = (box: { x: number, y: number, w: number, h: number }) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const captureCanvas = document.createElement('canvas');
+    captureCanvas.width = 150;
+    captureCanvas.height = 150;
+    const cCtx = captureCanvas.getContext('2d');
+    if (!cCtx) return;
+
+    const sourceX = Math.max(0, box.x);
+    const sourceY = Math.max(0, box.y);
+    const sourceW = Math.min(video.videoWidth - sourceX, box.w);
+    const sourceH = Math.min(video.videoHeight - sourceY, box.h);
+
+    cCtx.drawImage(
+      video,
+      sourceX, sourceY, sourceW, sourceH,
+      0, 0, 150, 150
+    );
+
+    const base64Image = captureCanvas.toDataURL('image/jpeg', 0.9);
+    setSelectedFace({
+      x: box.x,
+      y: box.y,
+      w: box.w,
+      h: box.h,
+      image: base64Image
+    });
+    setFirstName('');
+    setLastName('');
+    setDni('');
+  };
+
+  const cropFaceAndRegister = async (fName: string, lName: string, dniVal: string, face: { x: number, y: number, w: number, h: number, image: string }) => {
+    setStatus('Registrando Rostro...');
+    try {
+      const res = await fetch('http://localhost:5000/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: fName,
+          last_name: lName,
+          dni: dniVal,
+          image: face.image
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setInfoMsg(`¡Rostro registrado con éxito como ${fName} ${lName}!`);
+        setSelectedFace(null);
+        setFirstName('');
+        setLastName('');
+        setDni('');
+        fetchLogs();
+      } else {
+        setErrorMsg(data.error || 'No se pudo registrar el rostro.');
+      }
+    } catch (err) {
+      console.error("Register face error:", err);
+      setErrorMsg("No se pudo conectar al servidor para registrar el rostro.");
+    } finally {
+      setStatus('Conectado y Reproduciendo');
+    }
+  };
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (analysisEngineRef.current !== 'deepface' || !isCameraActive) return;
+    
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const containerWidth = rect.width;
+    const containerHeight = rect.height;
+
+    const video = videoRef.current;
+    if (!video) return;
+    const videoWidth = video.videoWidth || 640;
+    const videoHeight = video.videoHeight || 480;
+
+    const containerRatio = containerWidth / containerHeight;
+    const videoRatio = videoWidth / videoHeight;
+
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerRatio > videoRatio) {
+      scale = containerWidth / videoWidth;
+      offsetY = (containerHeight - videoHeight * scale) / 2;
+    } else {
+      scale = containerHeight / videoHeight;
+      offsetX = (containerWidth - videoWidth * scale) / 2;
+    }
+
+    const canvasX = (clickX - offsetX) / scale;
+    const canvasY = (clickY - offsetY) / scale;
+
+    const clickedBox = deepFaceBoxesRef.current.find(box => {
+      return canvasX >= box.x && canvasX <= box.x + box.w &&
+             canvasY >= box.y && canvasY <= box.y + box.h;
+    });
+
+    if (clickedBox && clickedBox.identity === 'Unknown') {
+      selectFaceForRegistration(clickedBox);
+    }
+  };
+
   const registerFace = async (fName: string, lName: string, dniVal: string) => {
     const video = videoRef.current;
     if (!video) return;
@@ -1416,7 +1603,7 @@ export default function App() {
     cCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
     const base64Image = captureCanvas.toDataURL('image/jpeg', 0.85);
 
-    setStatus('Registering Face...');
+    setStatus('Registrando Rostro...');
     try {
       const res = await fetch('http://localhost:5000/register', {
         method: 'POST',
@@ -1430,7 +1617,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        setInfoMsg(`Face registered successfully as ${fName} ${lName}!`);
+        setInfoMsg(`¡Rostro registrado con éxito como ${fName} ${lName}!`);
         setLoggedInUser(`${fName} ${lName}`);
         setLoggedInDni(dniVal);
         setIdentity(`${fName} ${lName}`);
@@ -1440,13 +1627,13 @@ export default function App() {
         setDni('');
         fetchLogs();
       } else {
-        setErrorMsg(data.error || 'Failed to register face.');
+        setErrorMsg(data.error || 'No se pudo registrar el rostro.');
       }
     } catch (err) {
       console.error("Register face error:", err);
-      setErrorMsg("Could not connect to server to register face.");
+      setErrorMsg("No se pudo conectar al servidor para registrar el rostro.");
     } finally {
-      setStatus('Connected & Playing');
+      setStatus('Conectado y Reproduciendo');
     }
   };
 
@@ -1485,7 +1672,16 @@ export default function App() {
       </div>
 
       {/* Overlays */}
-      <div className="relative z-20 w-full h-full pointer-events-auto p-4 sm:p-6 overflow-y-auto overflow-x-hidden pb-32 sm:pb-6">
+      <div 
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('.hud-card') || target.closest('button') || target.closest('select') || target.closest('input')) {
+            return;
+          }
+          handleCanvasClick(e);
+        }}
+        className="relative z-20 w-full h-full pointer-events-auto p-4 sm:p-6 overflow-y-auto overflow-x-hidden pb-32 sm:pb-6"
+      >
         <div className="flex flex-col lg:flex-row justify-between gap-4 min-h-full">
           
           {/* Left Column */}
@@ -1495,7 +1691,7 @@ export default function App() {
             <div className="flex flex-col gap-4 shrink-0 order-1 lg:order-none pointer-events-auto">
               
               {/* Status */}
-              <div className="flex flex-col items-start gap-4 shrink-0">
+              <div className="hud-card flex flex-col items-start gap-4 shrink-0">
                 <div className="flex items-start justify-between w-full">
                   <div>
                     <h1 className="text-2xl font-bold tracking-tighter text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">VISION_SYNC</h1>
@@ -1509,7 +1705,7 @@ export default function App() {
                           onChange={(e) => {
                             const val = e.target.value as 'mediapipe' | 'deepface';
                             setAnalysisEngine(val);
-                            deepFaceBoxRef.current = null;
+                            deepFaceBoxesRef.current = [];
                             setDemographics(null);
                           }}
                           className="bg-zinc-900/80 text-white/90 border border-white/20 px-2 py-1 text-[9px] font-mono rounded-none uppercase cursor-pointer hover:border-white/50 transition-colors focus:outline-none backdrop-blur-sm"
@@ -1549,14 +1745,14 @@ export default function App() {
                       onClick={() => { playHoverSound(); setIsInfoOpen(true); }}
                       onMouseEnter={playHoverSound}
                       className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors backdrop-blur-md border border-white/20 shrink-0"
-                      title="App Information"
+                      title="Información de la Aplicación"
                     >
                       <Info className="w-5 h-5 text-white" />
                     </button>
                   </div>
                 </div>
                 <div className="text-xs font-mono text-white/80 flex items-center gap-2 bg-black/40 backdrop-blur px-3 py-1.5 border border-white/20">
-                  <div className={`w-2 h-2 rounded-none ${status === 'Connected & Playing' ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]' : status.includes('Connecting') || status.includes('Starting') ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' : status === 'Loading Object Detection Model...' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : status.includes('Error') || status.includes('Denied') ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-zinc-600'}`} />
+                  <div className={`w-2 h-2 rounded-none ${status === 'Conectado y Reproduciendo' ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]' : status.includes('Conectando') || status.includes('Iniciando') ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]' : status === 'Cargando modelo de detección de objetos...' ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]' : status.includes('Error') || status.includes('denegado') ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-zinc-600'}`} />
                   {status}
                 </div>
               </div>
@@ -1592,7 +1788,7 @@ export default function App() {
               
               {/* Biometric Terminal HUD Card */}
               {analysisEngine === 'deepface' && (
-                <div className="bg-black/40 backdrop-blur-md border border-white/20 p-4 w-full shadow-[0_0_30px_rgba(0,0,0,0.8)] relative flex flex-col shrink-0">
+                <div className="hud-card bg-black/40 backdrop-blur-md border border-white/20 p-4 w-full shadow-[0_0_30px_rgba(0,0,0,0.8)] relative flex flex-col shrink-0">
                   <h3 className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <Key className="w-3 h-3 text-white/70" />
                     Terminal Biométrica
@@ -1628,11 +1824,86 @@ export default function App() {
                       )}
                     </div>
                   </div>
+
+                  {/* Rostros en Cámara */}
+                  {isCameraActive && (
+                    <div className="border border-white/10 bg-white/5 p-3 flex flex-col gap-2 mb-3">
+                      <span className="text-[8px] text-white/40 uppercase tracking-widest font-mono">Rostros en Cámara</span>
+                      {detectedFaces.length === 0 ? (
+                        <p className="text-[10px] text-white/40 italic font-mono">No se detectan rostros.</p>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                          {detectedFaces.map((face, idx) => {
+                            const isUnknown = face.identity === 'Unknown';
+                            const isSelected = selectedFace && 
+                              Math.abs(selectedFace.x - face.box.x) < 20 && 
+                              Math.abs(selectedFace.y - face.box.y) < 20;
+                              
+                            return (
+                              <div 
+                                key={idx} 
+                                className={`flex items-center justify-between p-1.5 border text-[10px] ${
+                                  isSelected 
+                                    ? 'border-blue-500 bg-blue-500/10' 
+                                    : isUnknown 
+                                      ? 'border-yellow-500/20 bg-yellow-500/5' 
+                                      : 'border-green-500/20 bg-green-500/5'
+                                }`}
+                              >
+                                <div className="flex flex-col min-w-0">
+                                  <span className={`font-bold ${isUnknown ? 'text-yellow-400' : 'text-green-400'} truncate uppercase`}>
+                                    {isUnknown ? 'Sujeto No Registrado' : face.identity}
+                                  </span>
+                                  <span className="text-[8px] text-white/60 font-mono">
+                                    {isUnknown ? 'No Autorizado' : `DNI: ${face.dni || 'S/D'}`} | Edad: {face.age} | G: {face.gender.substring(0, 1)}
+                                  </span>
+                                </div>
+                                {isUnknown && (
+                                  <button
+                                    onClick={() => selectFaceForRegistration(face.box)}
+                                    className="px-2 py-0.5 border border-yellow-500 text-yellow-500 bg-transparent hover:bg-yellow-500 hover:text-black transition-all text-[8px] font-bold uppercase tracking-wider font-mono cursor-pointer"
+                                  >
+                                    {isSelected ? 'Reg...' : 'Reg'}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Instructive Placeholder Helper */}
+                  {!selectedFace && isCameraActive && detectedFaces.some(f => f.identity === 'Unknown') && (
+                    <p className="text-[8px] text-yellow-500/80 font-mono text-center uppercase tracking-wide mb-2 animate-pulse">
+                      [Haz clic en 'REG' o sobre un recuadro amarillo para asociar datos]
+                    </p>
+                  )}
                   
-                  {/* Registration form if camera is active and no user logged in */}
-                  {isCameraActive && !loggedInUser && (
-                    <div className="border border-white/10 bg-white/5 p-3 flex flex-col gap-2">
-                      <span className="text-[9px] font-bold text-yellow-400 uppercase tracking-wider font-mono">Registrar Perfil para Autenticar</span>
+                  {/* Registration form if a face is selected */}
+                  {selectedFace && (
+                    <div className="border border-blue-500/30 bg-blue-500/5 p-3 flex flex-col gap-2 mb-3 relative">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider font-mono">Registrar Rostro</span>
+                        <button 
+                          onClick={() => setSelectedFace(null)}
+                          className="text-white/40 hover:text-white text-[9px] uppercase font-mono cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                      
+                      {/* Cropped Image Preview */}
+                      <div className="flex gap-3 items-center my-1">
+                        <div className="w-12 h-12 border border-white/20 bg-black overflow-hidden shrink-0 flex items-center justify-center">
+                          <img src={selectedFace.image} alt="Crop" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="text-[8px] text-white/50 font-mono">
+                          Rostro capturado. Ingresa los datos para registrarlo.
+                        </div>
+                      </div>
+                      
                       <div className="flex flex-col gap-2 mt-1">
                         <input
                           type="text"
@@ -1658,14 +1929,14 @@ export default function App() {
                         <button
                           onClick={() => {
                             if (firstName.trim() && lastName.trim() && dni.trim()) {
-                              registerFace(firstName.trim(), lastName.trim(), dni.trim());
+                              cropFaceAndRegister(firstName.trim(), lastName.trim(), dni.trim(), selectedFace);
                             } else {
                               setErrorMsg("Nombre, Apellido y DNI son obligatorios para el registro biométrico.");
                             }
                           }}
-                          className="w-full mt-1 bg-white text-black text-[9px] font-bold uppercase tracking-widest py-1.5 hover:bg-zinc-200 transition-colors rounded-none font-mono cursor-pointer"
+                          className="w-full mt-1 bg-blue-600 text-white text-[9px] font-bold uppercase tracking-widest py-1.5 hover:bg-blue-500 transition-colors rounded-none font-mono cursor-pointer"
                         >
-                          Registrar Rostro e Iniciar Sesión
+                          Guardar Registro
                         </button>
                       </div>
                     </div>
@@ -1693,7 +1964,7 @@ export default function App() {
               
               {/* Biometric Access Logs Panel */}
               {analysisEngine === 'deepface' && (
-                <div className="bg-black/40 backdrop-blur-md border border-white/20 p-4 w-full shadow-[0_0_30px_rgba(0,0,0,0.8)] relative flex flex-col h-48 shrink-0">
+                <div className="hud-card bg-black/40 backdrop-blur-md border border-white/20 p-4 w-full shadow-[0_0_30px_rgba(0,0,0,0.8)] relative flex flex-col h-48 shrink-0">
                   <h3 className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 flex items-center gap-2">
                     <Activity className="w-3.5 h-3.5 text-white/70" />
                     Registro de Accesos Biométricos
@@ -1756,19 +2027,19 @@ export default function App() {
                 <div className="bg-black/40 backdrop-blur-md border border-white/20 p-5 w-full h-full shadow-[0_0_30px_rgba(0,0,0,0.8)]" title="Detected emotional state based on facial expressions">
                   <h3 className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <Activity className="w-3 h-3" />
-                    Affective State
+                    Estado Afectivo
                   </h3>
                   <div className="text-3xl font-light tracking-tighter mb-4 capitalize text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">
-                    {consoleState.emotion}
+                    {translateEmotion(consoleState.emotion)}
                   </div>
                   
                   <div className="space-y-2">
                     {[
-                      { label: 'Smile', value: consoleState.blendshapes.smile },
-                      { label: 'Frown', value: consoleState.blendshapes.frown },
-                      { label: 'Mouth Open', value: consoleState.blendshapes.mouthOpen },
-                      { label: 'Brow Raise', value: consoleState.blendshapes.browRaise },
-                      { label: 'Eye Blink', value: consoleState.blendshapes.eyeBlink },
+                      { label: 'Sonrisa', value: consoleState.blendshapes.smile },
+                      { label: 'Ceño fruncido', value: consoleState.blendshapes.frown },
+                      { label: 'Boca abierta', value: consoleState.blendshapes.mouthOpen },
+                      { label: 'Cejas levantadas', value: consoleState.blendshapes.browRaise },
+                      { label: 'Parpadeo', value: consoleState.blendshapes.eyeBlink },
                     ].map((item) => (
                       <div key={item.label}>
                         <div className="flex justify-between text-[10px] mb-1">
@@ -1821,36 +2092,56 @@ export default function App() {
             <div className="flex flex-col gap-4 shrink-0 w-full order-2 lg:order-none pointer-events-auto">
               
               {/* Detected Entities */}
-              <div className="order-1 lg:order-2 w-full bg-black/40 backdrop-blur-md border border-white/20 p-5 shadow-[0_0_30px_rgba(0,0,0,0.8)]" title="Objects detected in the camera view">
+              <div className="hud-card order-1 lg:order-2 w-full bg-black/40 backdrop-blur-md border border-white/20 p-5 shadow-[0_0_30px_rgba(0,0,0,0.8)]" title="Objetos detectados en la vista de la cámara">
                 <h3 className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-3 flex items-center gap-2">
                   <Cpu className="w-3 h-3" />
-                  Entities
+                  Entidades
                 </h3>
                 {consoleState.objects.length === 0 ? (
-                  <p className="text-[10px] text-white/40 italic">No entities detected.</p>
+                  <p className="text-[10px] text-white/40 italic">No se detectaron entidades.</p>
                 ) : (
                   <ul className="space-y-1.5">
                     <AnimatePresence>
-                      {consoleState.objects.map((obj) => (
-                        <motion.li 
-                          key={obj}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 10 }}
-                          className="text-[10px] flex items-center gap-2 text-white/90 uppercase tracking-wider"
-                        >
-                          <span className="w-1 h-1 bg-white shadow-[0_0_5px_rgba(255,255,255,0.8)]" />
-                          {obj}
-                        </motion.li>
-                      ))}
+                      {consoleState.objects.map((obj) => {
+                        const translatedObj = obj === 'person' ? 'persona' :
+                                              obj === 'cell phone' ? 'teléfono celular' :
+                                              obj === 'laptop' ? 'computadora portátil' :
+                                              obj === 'tv' ? 'televisor' :
+                                              obj === 'cup' ? 'taza' :
+                                              obj === 'bottle' ? 'botella' :
+                                              obj === 'bowl' ? 'tazón' :
+                                              obj === 'cat' ? 'gato' :
+                                              obj === 'dog' ? 'perro' :
+                                              obj === 'bird' ? 'pájaro' :
+                                              obj === 'car' ? 'automóvil' :
+                                              obj === 'bus' ? 'autobús' :
+                                              obj === 'truck' ? 'camión' :
+                                              obj === 'chair' ? 'silla' :
+                                              obj === 'couch' ? 'sofá' :
+                                              obj === 'bed' ? 'cama' :
+                                              obj === 'potted plant' ? 'planta en maceta' :
+                                              obj === 'book' ? 'libro' : obj;
+                        return (
+                          <motion.li 
+                            key={obj}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 10 }}
+                            className="text-[10px] flex items-center gap-2 text-white/90 uppercase tracking-wider"
+                          >
+                            <span className="w-1 h-1 bg-white shadow-[0_0_5px_rgba(255,255,255,0.8)]" />
+                            {translatedObj}
+                          </motion.li>
+                        );
+                      })}
                     </AnimatePresence>
                   </ul>
                 )}
               </div>
 
               {/* Audio Profile */}
-              <div className="order-2 lg:order-1 w-full bg-black/40 backdrop-blur-md border border-white/20 p-5 shadow-[0_0_30px_rgba(0,0,0,0.8)]" title="AI-generated musical prompt based on your environment and mood">
-                <h3 className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-3">Audio Profile</h3>
+              <div className="hud-card order-2 lg:order-1 w-full bg-black/40 backdrop-blur-md border border-white/20 p-5 shadow-[0_0_30px_rgba(0,0,0,0.8)]" title="Prompt musical generado por IA basado en tu entorno y estado de ánimo">
+                <h3 className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-3">Perfil de Audio</h3>
                 <div className="relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-0.5 h-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
                   <p className="text-xs leading-relaxed text-white/90 pl-3">
@@ -1892,12 +2183,12 @@ export default function App() {
               <button 
                 onClick={() => setErrorMsg(null)}
                 className={`w-full py-3 text-xs font-mono font-bold uppercase tracking-widest transition-colors ${
-                  status === 'Camera Error' 
+                  status === 'Error de Cámara' 
                     ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400' 
                     : 'bg-white/5 hover:bg-white/10 border border-white/20 text-white/70'
                 }`}
               >
-                Dismiss
+                Cerrar
               </button>
             </motion.div>
           </motion.div>
@@ -1944,7 +2235,7 @@ export default function App() {
               <div className="flex flex-col-reverse sm:flex-row sm:items-start justify-between gap-4 mb-4">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2 self-start">
                   <Info className="w-5 h-5 shrink-0" />
-                  About Vision to Music
+                  Acerca de Vision to Music
                 </h2>
                 <button 
                   onClick={() => setIsInfoOpen(false)}
@@ -1956,18 +2247,18 @@ export default function App() {
               
               <div className="space-y-4 text-sm text-white/80 leading-relaxed">
                 <p>
-                  <strong>Vision to Music</strong> uses your device's camera to analyze your facial expressions and the objects around you in real-time.
+                  <strong>Vision to Music</strong> utiliza la cámara de tu dispositivo para analizar tus expresiones faciales y los objetos a tu alrededor en tiempo real.
                 </p>
                 <p>
-                  Based on this visual data, it generates a continuous, procedural ambient soundscape that matches your mood and environment.
+                  Con base en estos datos visuales, genera un paisaje sonoro ambiental procedural y continuo que se adapta a tu estado de ánimo y entorno.
                 </p>
                 <ul className="list-disc pl-5 space-y-2 text-white/70">
-                  <li><strong>Biometric Scan:</strong> Tracks your facial landmarks to determine your current emotion (happy, sad, surprised, angry, fear, disgust).</li>
-                  <li><strong>Entities:</strong> Detects objects in your environment (like laptops, cups, plants) to influence the musical vibe.</li>
-                  <li><strong>Audio Profile:</strong> The AI generates a descriptive prompt based on the scene, which drives the procedural music engine.</li>
+                  <li><strong>Escaneo Biométrico:</strong> Realiza un seguimiento de los puntos de tu rostro para determinar tu emoción actual (feliz, triste, sorprendido, enojado, miedo, disgustado).</li>
+                  <li><strong>Entidades:</strong> Detecta objetos en tu entorno (como computadoras portátiles, tazas, plantas) para influir en la vibración musical.</li>
+                  <li><strong>Perfil de Audio:</strong> La IA genera un prompt descriptivo basado en la escena, el cual impulsa el motor de música procedural.</li>
                 </ul>
                 <p className="text-xs text-white/50 mt-4 pt-4 border-t border-white/10">
-                  Note: All processing happens locally in your browser or via secure API calls. No video data is saved or transmitted.
+                  Nota: Todo el procesamiento ocurre de forma local en tu navegador o mediante llamadas seguras a la API. No se guarda ni se transmite ningún dato de video.
                 </p>
               </div>
             </motion.div>
