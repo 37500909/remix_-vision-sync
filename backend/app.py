@@ -237,6 +237,7 @@ def analyze():
             face_region = res['region']
             face_identity = "Unknown"
             face_dni = ""
+            face_status = "active"
             
             matched_df = find_matching_df(face_region, dfs)
             if matched_df is not None and not matched_df.empty:
@@ -254,7 +255,6 @@ def analyze():
                     face_identity = name_key.replace("_", " ")
                     
                     # Fetch DNI and status from SQLite
-                    face_status = "active"
                     try:
                         conn = sqlite3.connect(DB_FILE)
                         cursor = conn.cursor()
