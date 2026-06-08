@@ -480,6 +480,13 @@ export default function App() {
   const [loggedInDni, setLoggedInDni] = useState<string | null>(null);
   const [registrationProgress, setRegistrationProgress] = useState<number | null>(null);
   const [registrationStatusText, setRegistrationStatusText] = useState<string>('');
+  
+  // Interactive Biometric Quality States & Refs
+  const [enrollmentStep, setEnrollmentStep] = useState<'idle' | 'liveness' | 'frontal' | 'left' | 'right' | 'submitting'>('idle');
+  const enrollmentStepRef = useRef<'idle' | 'liveness' | 'frontal' | 'left' | 'right' | 'submitting'>('idle');
+  const enrollmentPhotosRef = useRef<string[]>([]);
+  const [hudPose, setHudPose] = useState({ yaw: 0, roll: 0, pitch: 0 });
+  const [hudQuality, setHudQuality] = useState({ brightness: 120, isNeutral: true, warning: '' });
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
   const [activeUsers, setActiveUsers] = useState<{ name: string; dni: string }[]>([]);
   const [detectedFaces, setDetectedFaces] = useState<any[]>([]);
@@ -743,6 +750,137 @@ export default function App() {
           
           if (faceResult.faceLandmarks && faceResult.faceLandmarks.length > 0) {
             localFaceDetected = true;
+
+            // Biometric Quality Assessment & Head Pose Estimation
+            const landmarks = faceResult.faceLandmarks[0];
+            const leftEye = landmarks[33];
+            const rightEye = landmarks[263];
+            const noseTip = landmarks[4];
+            const leftEdge = landmarks[234];
+            const rightEdge = landmarks[454];
+            const forehead = landmarks[10];
+            const chin = landmarks[152];
+            
+            const rollRad = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+            const roll = rollRad * (180 / Math.PI);
+            
+            const leftDist = noseTip.x - leftEdge.x;
+            const rightDist = rightEdge.x - noseTip.x;
+            const yawRatio = leftDist / (leftDist + rightDist);
+            const yaw = (yawRatio - 0.5) * 100;
+            
+            const upperDist = noseTip.y - forehead.y;
+            const lowerDist = chin.y - noseTip.y;
+            const pitchRatio = upperDist / (upperDist + lowerDist);
+            const pitch = (pitchRatio - 0.58) * 100;
+
+            // Calculate face box dimensions for brightness checks
+            let fMinX = 1, fMaxX = 0, fMinY = 1, fMaxY = 0;
+            for (const pt of landmarks) {
+              if (pt.x < fMinX) fMinX = pt.x;
+              if (pt.x > fMaxX) fMaxX = pt.x;
+              if (pt.y < fMinY) fMinY = pt.y;
+              if (pt.y > fMaxY) fMaxY = pt.y;
+            }
+            const fx = fMinX * video.videoWidth;
+            const fy = fMinY * video.videoHeight;
+            const fw = (fMaxX - fMinX) * video.videoWidth;
+            const fh = (fMaxY - fMinY) * video.videoHeight;
+
+            // Sample brightness from the canvas inside the face area
+            let avgBrightness = 120;
+            try {
+              const sampleW = Math.floor(fw / 2);
+              const sampleH = Math.floor(fh / 2);
+              const sampleX = Math.floor(fx + fw / 4);
+              const sampleY = Math.floor(fy + fh / 4);
+              
+              if (sampleW > 5 && sampleH > 5 && sampleX >= 0 && sampleY >= 0 && sampleX + sampleW <= canvas.width && sampleY + sampleH <= canvas.height) {
+                const imgData = ctx.getImageData(sampleX, sampleY, sampleW, sampleH);
+                const pData = imgData.data;
+                let brightnessSum = 0;
+                for (let i = 0; i < pData.length; i += 4) {
+                  brightnessSum += (pData[i] + pData[i+1] + pData[i+2]) / 3;
+                }
+                avgBrightness = brightnessSum / (pData.length / 4);
+              }
+            } catch (e) {}
+
+            // Detect expression (using faceResult categories)
+            let smileScore = 0;
+            let frownScore = 0;
+            let blinkScore = 0;
+            if (faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0) {
+              const blendshapes = faceResult.faceBlendshapes[0].categories;
+              smileScore = ((blendshapes.find(b => b.categoryName === 'mouthSmileLeft')?.score || 0) + (blendshapes.find(b => b.categoryName === 'mouthSmileRight')?.score || 0)) / 2;
+              frownScore = Math.min(1, ((blendshapes.find(b => b.categoryName === 'mouthFrownLeft')?.score || 0) + (blendshapes.find(b => b.categoryName === 'mouthFrownRight')?.score || 0) + (blendshapes.find(b => b.categoryName === 'mouthRollLower')?.score || 0)) * 5);
+              blinkScore = ((blendshapes.find(b => b.categoryName === 'eyeBlinkLeft')?.score || 0) + (blendshapes.find(b => b.categoryName === 'eyeBlinkRight')?.score || 0)) / 2;
+            }
+
+            const isNeutral = smileScore < 0.18 && frownScore < 0.18;
+            let qualityWarning = '';
+            if (avgBrightness < 60) {
+              qualityWarning = "ILUMINACIÓN INSUFICIENTE (MUY OSCURO)";
+            } else if (avgBrightness > 215) {
+              qualityWarning = "SOBREEXPOSICIÓN (MUCHA LUZ)";
+            } else if (!isNeutral) {
+              qualityWarning = "EXPRESIÓN NEUTRAL REQUERIDA (NO SONRÍAS / FRUNZAS)";
+            }
+
+            // Sync with state periodically (throttled)
+            if (Math.random() < 0.15) {
+              setHudPose({ yaw, roll, pitch });
+              setHudQuality({ brightness: avgBrightness, isNeutral, warning: qualityWarning });
+            }
+
+            // Interactive steps handler
+            const currentStep = enrollmentStepRef.current;
+            if (currentStep !== 'idle') {
+              if (currentStep === 'liveness') {
+                if (blinkScore > 0.65) {
+                  enrollmentStepRef.current = 'frontal';
+                  setEnrollmentStep('frontal');
+                  setRegistrationProgress(20);
+                  setRegistrationStatusText("ÁNGULO 1/3: MIRA AL CENTRO DEL ÓVALO CON EXPRESIÓN NEUTRAL...");
+                }
+              } else if (currentStep === 'frontal') {
+                if (qualityWarning === '') {
+                  if (Math.abs(yaw) < 4 && Math.abs(roll) < 5 && Math.abs(pitch) < 5) {
+                    const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
+                    if (img) {
+                      enrollmentPhotosRef.current.push(img);
+                      enrollmentStepRef.current = 'left';
+                      setEnrollmentStep('left');
+                      setRegistrationProgress(50);
+                      setRegistrationStatusText("ÁNGULO 2/3: GIRA LENTAMENTE LA CABEZA A LA IZQUIERDA...");
+                    }
+                  }
+                }
+              } else if (currentStep === 'left') {
+                if (yaw < -8) {
+                  const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
+                  if (img) {
+                    enrollmentPhotosRef.current.push(img);
+                    enrollmentStepRef.current = 'right';
+                    setEnrollmentStep('right');
+                    setRegistrationProgress(80);
+                    setRegistrationStatusText("ÁNGULO 3/3: GIRA LENTAMENTE LA CABEZA A LA DERECHA...");
+                  }
+                }
+              } else if (currentStep === 'right') {
+                if (yaw > 8) {
+                  const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
+                  if (img) {
+                    enrollmentPhotosRef.current.push(img);
+                    enrollmentStepRef.current = 'submitting';
+                    setEnrollmentStep('submitting');
+                    setRegistrationProgress(95);
+                    setRegistrationStatusText("PROCESANDO Y REGISTRANDO PERFIL BIOMÉTRICO...");
+                    submitEnrollment(firstName.trim(), lastName.trim(), dni.trim());
+                  }
+                }
+              }
+            }
             
             // Draw Face Mesh Point Cloud on secondary canvas
             if (faceCanvasRef.current) {
@@ -829,7 +967,7 @@ export default function App() {
             }
 
             // Draw arrows and blurred line on main canvas
-            const landmarks = faceResult.faceLandmarks[0];
+            // landmarks is already defined above as faceResult.faceLandmarks[0]
             
             // Draw blurred line scanning over the face every 40 seconds
             const scanTime = performance.now() / 40000; // 40 seconds
@@ -1576,7 +1714,7 @@ export default function App() {
     setDni('');
   };
 
-  const captureCurrentFaceCrop = (box: { x: number, y: number, w: number, h: number }): string | null => {
+  function captureCurrentFaceCrop(box: { x: number, y: number, w: number, h: number }): string | null {
     const video = videoRef.current;
     if (!video) return null;
 
@@ -1614,36 +1752,19 @@ export default function App() {
     );
 
     return captureCanvas.toDataURL('image/jpeg', 0.9);
-  };
+  }
 
-  const cropFaceAndRegister = async (fName: string, lName: string, dniVal: string, face: { x: number, y: number, w: number, h: number, image: string }) => {
-    setRegistrationProgress(10);
-    setRegistrationStatusText("Inicializando captura de múltiples ángulos...");
-    setStatus('Registrando Rostro...');
-    
-    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  function startInteractiveEnrollment() {
+    if (!selectedFace) return;
+    enrollmentPhotosRef.current = [];
+    enrollmentStepRef.current = 'liveness';
+    setEnrollmentStep('liveness');
+    setRegistrationProgress(0);
+    setRegistrationStatusText("PRUEBA DE VIDA: PARPADEA UNA VEZ PARA INICIAR...");
+  }
 
+  async function submitEnrollment(fName: string, lName: string, dniVal: string) {
     try {
-      const images: string[] = [face.image]; // First image is already captured
-      
-      // Capture 2nd image after delay
-      await delay(600);
-      setRegistrationProgress(35);
-      setRegistrationStatusText("Capturando Ángulo 2/3 (Gira levemente)...");
-      const img2 = captureCurrentFaceCrop(face);
-      if (img2) images.push(img2);
-
-      // Capture 3rd image after delay
-      await delay(600);
-      setRegistrationProgress(65);
-      setRegistrationStatusText("Capturando Ángulo 3/3 (Inclina levemente)...");
-      const img3 = captureCurrentFaceCrop(face);
-      if (img3) images.push(img3);
-
-      await delay(400);
-      setRegistrationProgress(85);
-      setRegistrationStatusText("Enviando biometrías al servidor de seguridad...");
-
       const res = await fetch('http://localhost:5000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1651,15 +1772,15 @@ export default function App() {
           first_name: fName,
           last_name: lName,
           dni: dniVal,
-          image: images
+          image: enrollmentPhotosRef.current
         })
       });
       const data = await res.json();
       if (data.success) {
         setRegistrationProgress(100);
-        setRegistrationStatusText("¡REGISTRO COMPLETO! ROSTROS PROCESADOS");
+        setRegistrationStatusText("¡REGISTRO COMPLETO! PERFIL PROCESADO CON ÉXITO");
         
-        await delay(1500); // Let the user see 100% complete message
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         setInfoMsg(`¡Rostro registrado con éxito como ${fName} ${lName}!`);
         setSelectedFace(null);
@@ -1676,9 +1797,15 @@ export default function App() {
     } finally {
       setRegistrationProgress(null);
       setRegistrationStatusText('');
+      setEnrollmentStep('idle');
+      enrollmentStepRef.current = 'idle';
       setStatus('Conectado y Reproduciendo');
     }
-  };
+  }
+
+  async function cropFaceAndRegister(fName: string, lName: string, dniVal: string, face: { x: number, y: number, w: number, h: number, image: string }) {
+    startInteractiveEnrollment();
+  }
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (analysisEngineRef.current !== 'deepface' || !isCameraActive) return;
@@ -2419,9 +2546,39 @@ export default function App() {
               />
             </div>
             
-            <span className="text-[10px] text-white/70 uppercase tracking-wider h-8 text-center px-2">
+            <span className="text-[10px] text-white/70 uppercase tracking-wider h-12 text-center px-2 flex items-center justify-center mb-4">
               {registrationStatusText}
             </span>
+
+            {/* Quality Gauges for Interactive Steps */}
+            {enrollmentStep !== 'idle' && enrollmentStep !== 'liveness' && enrollmentStep !== 'submitting' && (
+              <div className="w-full border-t border-white/10 pt-4 flex flex-col gap-2 text-[8px] text-white/60 text-left font-mono">
+                <div className="flex justify-between">
+                  <span>BRILLO (60 - 210):</span>
+                  <span className={hudQuality.brightness < 60 || hudQuality.brightness > 215 ? "text-yellow-500 font-bold animate-pulse" : "text-green-400 font-bold"}>
+                    {hudQuality.brightness.toFixed(0)} ({hudQuality.brightness < 60 ? 'BAJO' : hudQuality.brightness > 215 ? 'ALTO' : 'OK'})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>EXPRESIÓN NEUTRAL:</span>
+                  <span className={hudQuality.isNeutral ? "text-green-400 font-bold" : "text-yellow-500 font-bold animate-pulse"}>
+                    {hudQuality.isNeutral ? 'SÍ' : 'NO NEUTRAL'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>ÁNGULO DE GIRO (YAW):</span>
+                  <span className="text-white font-bold">
+                    {hudPose.yaw > 8 ? 'DERECHA' : hudPose.yaw < -8 ? 'IZQUIERDA' : 'CENTRO'} ({hudPose.yaw.toFixed(0)}°)
+                  </span>
+                </div>
+                
+                {hudQuality.warning && (
+                  <div className="mt-2 p-1.5 bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 font-bold uppercase tracking-wider text-center text-[7px] animate-pulse">
+                    ⚠️ {hudQuality.warning}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
