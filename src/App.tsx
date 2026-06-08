@@ -478,6 +478,8 @@ export default function App() {
   const [lastName, setLastName] = useState<string>('');
   const [dni, setDni] = useState<string>('');
   const [loggedInDni, setLoggedInDni] = useState<string | null>(null);
+  const [registrationProgress, setRegistrationProgress] = useState<number | null>(null);
+  const [registrationStatusText, setRegistrationStatusText] = useState<string>('');
   const [accessLogs, setAccessLogs] = useState<any[]>([]);
   const [activeUsers, setActiveUsers] = useState<{ name: string; dni: string }[]>([]);
   const [detectedFaces, setDetectedFaces] = useState<any[]>([]);
@@ -1229,7 +1231,8 @@ export default function App() {
           });
 
           // Draw guide box/oval for face alignment during registration/scanning
-          if (!loggedInUser) {
+          // Disappears once a face is selected or a user is logged in
+          if (!loggedInUser && !selectedFace) {
             const boxWidth = 240;
             const boxHeight = 290;
             const cx = canvas.width / 2;
@@ -1573,9 +1576,74 @@ export default function App() {
     setDni('');
   };
 
+  const captureCurrentFaceCrop = (box: { x: number, y: number, w: number, h: number }): string | null => {
+    const video = videoRef.current;
+    if (!video) return null;
+
+    const captureCanvas = document.createElement('canvas');
+    captureCanvas.width = 150;
+    captureCanvas.height = 150;
+    const cCtx = captureCanvas.getContext('2d');
+    if (!cCtx) return null;
+
+    let targetBox = box;
+    if (deepFaceBoxesRef.current && deepFaceBoxesRef.current.length > 0) {
+      let closestBox = deepFaceBoxesRef.current[0];
+      let minDist = Infinity;
+      for (const b of deepFaceBoxesRef.current) {
+        const dist = Math.hypot(b.x - box.x, b.y - box.y);
+        if (dist < minDist) {
+          minDist = dist;
+          closestBox = b;
+        }
+      }
+      if (minDist < 100) {
+        targetBox = closestBox;
+      }
+    }
+
+    const sourceX = Math.max(0, targetBox.x);
+    const sourceY = Math.max(0, targetBox.y);
+    const sourceW = Math.min(video.videoWidth - sourceX, targetBox.w);
+    const sourceH = Math.min(video.videoHeight - sourceY, targetBox.h);
+
+    cCtx.drawImage(
+      video,
+      sourceX, sourceY, sourceW, sourceH,
+      0, 0, 150, 150
+    );
+
+    return captureCanvas.toDataURL('image/jpeg', 0.9);
+  };
+
   const cropFaceAndRegister = async (fName: string, lName: string, dniVal: string, face: { x: number, y: number, w: number, h: number, image: string }) => {
+    setRegistrationProgress(10);
+    setRegistrationStatusText("Inicializando captura de múltiples ángulos...");
     setStatus('Registrando Rostro...');
+    
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
     try {
+      const images: string[] = [face.image]; // First image is already captured
+      
+      // Capture 2nd image after delay
+      await delay(600);
+      setRegistrationProgress(35);
+      setRegistrationStatusText("Capturando Ángulo 2/3 (Gira levemente)...");
+      const img2 = captureCurrentFaceCrop(face);
+      if (img2) images.push(img2);
+
+      // Capture 3rd image after delay
+      await delay(600);
+      setRegistrationProgress(65);
+      setRegistrationStatusText("Capturando Ángulo 3/3 (Inclina levemente)...");
+      const img3 = captureCurrentFaceCrop(face);
+      if (img3) images.push(img3);
+
+      await delay(400);
+      setRegistrationProgress(85);
+      setRegistrationStatusText("Enviando biometrías al servidor de seguridad...");
+
       const res = await fetch('http://localhost:5000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1583,11 +1651,16 @@ export default function App() {
           first_name: fName,
           last_name: lName,
           dni: dniVal,
-          image: face.image
+          image: images
         })
       });
       const data = await res.json();
       if (data.success) {
+        setRegistrationProgress(100);
+        setRegistrationStatusText("¡REGISTRO COMPLETO! ROSTROS PROCESADOS");
+        
+        await delay(1500); // Let the user see 100% complete message
+        
         setInfoMsg(`¡Rostro registrado con éxito como ${fName} ${lName}!`);
         setSelectedFace(null);
         setFirstName('');
@@ -1601,6 +1674,8 @@ export default function App() {
       console.error("Register face error:", err);
       setErrorMsg("No se pudo conectar al servidor para registrar el rostro.");
     } finally {
+      setRegistrationProgress(null);
+      setRegistrationStatusText('');
       setStatus('Conectado y Reproduciendo');
     }
   };
@@ -2324,6 +2399,32 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Registration Progress HUD Overlay */}
+      {registrationProgress !== null && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md font-mono pointer-events-auto">
+          <div className="w-80 bg-zinc-900 border border-blue-500/50 p-6 shadow-[0_0_50px_rgba(59,130,246,0.3)] flex flex-col items-center text-center">
+            <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+            <span className="text-xs uppercase tracking-widest text-blue-400 font-bold mb-2">Procesando Registro</span>
+            
+            {/* Percentage and bar */}
+            <span className="text-3xl font-light text-white mb-4 drop-shadow-[0_0_10px_rgba(255,255,255,0.4)]">
+              {registrationProgress}%
+            </span>
+            
+            <div className="w-full h-[3px] bg-white/10 mb-4 overflow-hidden relative">
+              <div 
+                className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)] transition-all duration-300"
+                style={{ width: `${registrationProgress}%` }}
+              />
+            </div>
+            
+            <span className="text-[10px] text-white/70 uppercase tracking-wider h-8 text-center px-2">
+              {registrationStatusText}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

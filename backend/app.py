@@ -72,20 +72,26 @@ def register():
             return jsonify({'error': 'First Name and Last Name cannot be empty'}), 400
             
         name_key = f"{first_name}_{last_name}"
-        image_data = data['image']
-        
-        # Remove data URI prefix if present (e.g. "data:image/jpeg;base64,")
-        if ',' in image_data:
-            image_data = image_data.split(',')[1]
+        images_data = data['image']
+        if not isinstance(images_data, list):
+            images_data = [images_data]
             
-        img_bytes = base64.b64decode(image_data)
-        
-        # Save reference face image in db folder
-        file_path = os.path.join(DB_DIR, f"{name_key}.jpg")
-        with open(file_path, "wb") as f:
-            f.write(img_bytes)
+        saved_paths = []
+        for idx, img_data in enumerate(images_data):
+            # Remove data URI prefix if present
+            if ',' in img_data:
+                img_data = img_data.split(',')[1]
+                
+            img_bytes = base64.b64decode(img_data)
+            
+            # Save reference face image in db folder with _index suffix
+            file_path = os.path.join(DB_DIR, f"{name_key}_{idx + 1}.jpg")
+            with open(file_path, "wb") as f:
+                f.write(img_bytes)
+            saved_paths.append(file_path)
             
         dni = data.get('dni', '').strip()
+        primary_image_path = saved_paths[0] if saved_paths else ""
         
         # Insert or update user record in local SQLite database
         conn = sqlite3.connect(DB_FILE)
@@ -95,12 +101,12 @@ def register():
         if not row:
             cursor.execute(
                 "INSERT INTO users (first_name, last_name, dni, image_path) VALUES (?, ?, ?, ?)",
-                (first_name, last_name, dni, file_path)
+                (first_name, last_name, dni, primary_image_path)
             )
         else:
             cursor.execute(
                 "UPDATE users SET image_path = ?, dni = ? WHERE id = ?",
-                (file_path, dni, row[0])
+                (primary_image_path, dni, row[0])
             )
         conn.commit()
         conn.close()
@@ -231,6 +237,11 @@ def analyze():
                     identity_path = closest_match['identity']
                     filename = os.path.basename(identity_path)
                     name_key = os.path.splitext(filename)[0]
+                    # Strip index suffix (e.g. "_1", "_2") if present
+                    if '_' in name_key:
+                        parts = name_key.split('_')
+                        if parts[-1].isdigit():
+                            name_key = '_'.join(parts[:-1])
                     face_identity = name_key.replace("_", " ")
                     
                     # Fetch DNI from SQLite
