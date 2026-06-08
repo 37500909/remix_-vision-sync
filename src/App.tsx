@@ -1227,6 +1227,65 @@ export default function App() {
             ctx.fillStyle = (isUnknown && !isSelected) ? `rgba(234, 179, 8, ${opacity * 0.8})` : isSelected ? `rgba(59, 130, 246, ${opacity * 0.8})` : `rgba(255, 255, 255, ${opacity * 0.8})`;
             ctx.fillText(subLabelText, labelX + 6, labelY + 22);
           });
+
+          // Draw guide box/oval for face alignment during registration/scanning
+          if (!loggedInUser) {
+            const boxWidth = 240;
+            const boxHeight = 290;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const x = cx - boxWidth / 2;
+            const y = cy - boxHeight / 2;
+            
+            const time = performance.now() / 1000;
+            // Pulsing animation for breathing effect
+            const pulse = 0.4 + Math.sin(time * 3.5) * 0.15;
+            
+            // Draw a dashed ellipse in the center
+            ctx.save();
+            ctx.strokeStyle = `rgba(234, 179, 8, ${pulse})`; // Glowing amber/yellow
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, boxWidth / 2, boxHeight / 2, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.restore();
+            
+            // Draw stylized retro corner brackets
+            const bracketLength = 20;
+            const padding = 15;
+            const bx = x - padding;
+            const by = y - padding;
+            const bw = boxWidth + padding * 2;
+            const bh = boxHeight + padding * 2;
+            
+            ctx.strokeStyle = `rgba(234, 179, 8, 0.45)`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            // Top Left
+            ctx.moveTo(bx, by + bracketLength); ctx.lineTo(bx, by); ctx.lineTo(bx + bracketLength, by);
+            // Top Right
+            ctx.moveTo(bx + bw - bracketLength, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + bracketLength);
+            // Bottom Left
+            ctx.moveTo(bx, by + bh - bracketLength); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + bracketLength, by + bh);
+            // Bottom Right
+            ctx.moveTo(bx + bw - bracketLength, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - bracketLength);
+            ctx.stroke();
+            
+            // Guide text labels
+            ctx.font = '700 9px "JetBrains Mono", monospace';
+            ctx.fillStyle = `rgba(234, 179, 8, ${pulse * 1.3})`;
+            const labelText1 = "ALINEAR ROSTRO EN EL ÓVALO";
+            const labelText2 = "SISTEMA DE REGISTRO BIOMÉTRICO";
+            const w1 = ctx.measureText(labelText1).width;
+            const w2 = ctx.measureText(labelText2).width;
+            
+            ctx.fillText(labelText1, cx - w1 / 2, by - 8);
+            
+            ctx.font = '500 7px "JetBrains Mono", monospace';
+            ctx.fillStyle = `rgba(255, 255, 255, 0.5)`;
+            ctx.fillText(labelText2, cx - w2 / 2, by + bh + 14);
+          }
         }
 
         // Throttle React state updates for the console UI to ~10fps
