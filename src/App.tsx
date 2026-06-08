@@ -1369,8 +1369,8 @@ export default function App() {
           });
 
           // Draw guide box/oval for face alignment during registration/scanning
-          // Disappears once a face is selected or a user is logged in
-          if (!loggedInUser && !selectedFace) {
+          // Disappears once a face is selected, but reappears during active enrollment steps
+          if (!loggedInUser && (selectedFace === null || enrollmentStepRef.current !== 'idle')) {
             const boxWidth = 240;
             const boxHeight = 290;
             const cx = canvas.width / 2;
@@ -2529,8 +2529,8 @@ export default function App() {
 
       {/* Registration Progress HUD Overlay */}
       {registrationProgress !== null && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md font-mono pointer-events-auto">
-          <div className="w-80 bg-zinc-900 border border-blue-500/50 p-6 shadow-[0_0_50px_rgba(59,130,246,0.3)] flex flex-col items-center text-center">
+        <div className="fixed top-4 right-4 sm:top-6 sm:right-6 lg:top-28 z-[100] font-mono pointer-events-auto">
+          <div className="w-80 bg-zinc-950/90 border border-blue-500/50 p-5 shadow-[0_0_35px_rgba(59,130,246,0.25)] backdrop-blur-md flex flex-col items-center text-center">
             <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
             <span className="text-xs uppercase tracking-widest text-blue-400 font-bold mb-2">Procesando Registro</span>
             
