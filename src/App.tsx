@@ -687,7 +687,8 @@ export default function App() {
         // --- Drawing Logic ---
         smoothedBoxesRef.current.forEach((box) => {
           const { x, y, width, height, opacity, labelX, labelY } = box;
-          const text = `${box.class} (${Math.round(box.score * 100)}%)`;
+          const labelClass = box.class === 'person' ? 'CUERPO (BODY_BLOCK)' : box.class;
+          const text = `${labelClass} (${Math.round(box.score * 100)}%)`;
 
           ctx.strokeStyle = `rgba(255, 255, 255, ${opacity * 0.8})`;
           ctx.lineWidth = 1;
@@ -744,6 +745,7 @@ export default function App() {
         let currentEmotion = "neutral";
         let currentBlendshapes = { smile: 0, frown: 0, mouthOpen: 0, browRaise: 0, eyeBlink: 0, pucker: 0 };
         let localFaceDetected = false;
+        let currentQualityWarning = '';
 
         if (faceLandmarkerRef.current) {
           const faceResult = faceLandmarkerRef.current.detectForVideo(video, performance.now());
@@ -817,15 +819,17 @@ export default function App() {
               blinkScore = ((blendshapes.find(b => b.categoryName === 'eyeBlinkLeft')?.score || 0) + (blendshapes.find(b => b.categoryName === 'eyeBlinkRight')?.score || 0)) / 2;
             }
 
-            const isNeutral = smileScore < 0.18 && frownScore < 0.18;
+            // Relaxed thresholds for registration (ISO/IEC guidelines relaxed for compatibility)
+            const isNeutral = smileScore < 0.40 && frownScore < 0.40;
             let qualityWarning = '';
-            if (avgBrightness < 60) {
+            if (avgBrightness < 25) {
               qualityWarning = "ILUMINACIÓN INSUFICIENTE (MUY OSCURO)";
-            } else if (avgBrightness > 215) {
+            } else if (avgBrightness > 240) {
               qualityWarning = "SOBREEXPOSICIÓN (MUCHA LUZ)";
             } else if (!isNeutral) {
               qualityWarning = "EXPRESIÓN NEUTRAL REQUERIDA (NO SONRÍAS / FRUNZAS)";
             }
+            currentQualityWarning = qualityWarning;
 
             // Sync with state periodically (throttled)
             if (Math.random() < 0.15) {
@@ -837,27 +841,28 @@ export default function App() {
             const currentStep = enrollmentStepRef.current;
             if (currentStep !== 'idle') {
               if (currentStep === 'liveness') {
-                if (blinkScore > 0.65) {
+                // Relaxed liveness blink trigger
+                if (blinkScore > 0.50) {
                   enrollmentStepRef.current = 'frontal';
                   setEnrollmentStep('frontal');
                   setRegistrationProgress(20);
                   setRegistrationStatusText("ÁNGULO 1/3: MIRA AL CENTRO DEL ÓVALO CON EXPRESIÓN NEUTRAL...");
                 }
               } else if (currentStep === 'frontal') {
-                if (qualityWarning === '') {
-                  if (Math.abs(yaw) < 4 && Math.abs(roll) < 5 && Math.abs(pitch) < 5) {
-                    const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
-                    if (img) {
-                      enrollmentPhotosRef.current.push(img);
-                      enrollmentStepRef.current = 'left';
-                      setEnrollmentStep('left');
-                      setRegistrationProgress(50);
-                      setRegistrationStatusText("ÁNGULO 2/3: GIRA LENTAMENTE LA CABEZA A LA IZQUIERDA...");
-                    }
+                // Angle checks relaxed: Yaw < 15, Roll < 15, Pitch < 15. Quality warning is displayed but DOES NOT block capture.
+                if (Math.abs(yaw) < 15 && Math.abs(roll) < 15 && Math.abs(pitch) < 15) {
+                  const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
+                  if (img) {
+                    enrollmentPhotosRef.current.push(img);
+                    enrollmentStepRef.current = 'left';
+                    setEnrollmentStep('left');
+                    setRegistrationProgress(50);
+                    setRegistrationStatusText("ÁNGULO 2/3: GIRA LENTAMENTE LA CABEZA A LA IZQUIERDA...");
                   }
                 }
               } else if (currentStep === 'left') {
-                if (yaw < -8) {
+                // Yaw threshold relaxed to -6 (meaning slightly turned left)
+                if (yaw < -6) {
                   const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
                   if (img) {
                     enrollmentPhotosRef.current.push(img);
@@ -868,7 +873,8 @@ export default function App() {
                   }
                 }
               } else if (currentStep === 'right') {
-                if (yaw > 8) {
+                // Yaw threshold relaxed to 6 (meaning slightly turned right)
+                if (yaw > 6) {
                   const img = captureCurrentFaceCrop({ x: fx, y: fy, w: fw, h: fh });
                   if (img) {
                     enrollmentPhotosRef.current.push(img);
@@ -1338,12 +1344,12 @@ export default function App() {
             
             // Draw name and DNI above the bounding box
             ctx.font = '700 9px "JetBrains Mono", monospace';
-            let labelText = isUnknown ? "SUJETO_NO_REGISTRADO" : identity.toUpperCase();
-            let subLabelText = isUnknown ? "ADVERTENCIA: NO AUTORIZADO" : `DNI: ${dni || 'S/D'}`;
+            let labelText = isUnknown ? "CABEZA (Sujeto Desconocido)" : `CABEZA: ${identity.toUpperCase()}`;
+            let subLabelText = isUnknown ? "BLOQUE CABEZA - NO AUTORIZADO" : `DNI: ${dni || 'S/D'} (AUTORIZADO)`;
             
             if (isSelected) {
-              labelText = "REGISTRANDO SUJETO...";
-              subLabelText = "SELECCIONADO EN PANEL";
+              labelText = "CABEZA: REGISTRANDO SUJETO...";
+              subLabelText = "SELECCIONADO PARA REGISTRO";
             }
             
             const labelWidth = Math.max(ctx.measureText(labelText).width, ctx.measureText(subLabelText).width) + 12;
@@ -1426,6 +1432,75 @@ export default function App() {
             ctx.font = '500 7px "JetBrains Mono", monospace';
             ctx.fillStyle = `rgba(255, 255, 255, 0.5)`;
             ctx.fillText(labelText2, cx - w2 / 2, by + bh + 14);
+
+            // Real-time Visual Guidance Overlay during interactive enrollment
+            const currentEnrollmentStep = enrollmentStepRef.current;
+            if (currentEnrollmentStep !== 'idle') {
+              ctx.save();
+              ctx.font = '700 12px "JetBrains Mono", monospace';
+              
+              let stepColor = '#3b82f6'; // Blue
+              let instruction = '';
+              let subInstruction = '';
+              
+              if (currentEnrollmentStep === 'liveness') {
+                stepColor = '#f59e0b'; // Amber/Yellow
+                instruction = "1. PRUEBA DE VIDA (LIVENESS)";
+                subInstruction = "PARPADEA UNA VEZ (BLINK) PARA CONTINUAR";
+              } else if (currentEnrollmentStep === 'frontal') {
+                stepColor = '#10b981'; // Green
+                instruction = "2. ESCANEO FRONTAL";
+                subInstruction = currentQualityWarning ? `RECOMENDACIÓN: ${currentQualityWarning}` : "MIRA AL CENTRO CON EXPRESIÓN NEUTRAL";
+              } else if (currentEnrollmentStep === 'left') {
+                stepColor = '#06b6d4'; // Cyan
+                instruction = "3. ESCANEO IZQUIERDO";
+                subInstruction = "GIRA LA CABEZA LENTAMENTE A LA IZQUIERDA";
+              } else if (currentEnrollmentStep === 'right') {
+                stepColor = '#8b5cf6'; // Purple
+                instruction = "4. ESCANEO DERECHO";
+                subInstruction = "GIRA LA CABEZA LENTAMENTE A LA DERECHA";
+              } else if (currentEnrollmentStep === 'submitting') {
+                stepColor = '#3b82f6';
+                instruction = "5. REGISTRANDO BIOMETRÍA";
+                subInstruction = "PROCESANDO... ESPERE POR FAVOR";
+              }
+              
+              // Draw overlay box at the top
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+              ctx.fillRect(cx - 180, by - 60, 360, 45);
+              ctx.strokeStyle = stepColor;
+              ctx.lineWidth = 2;
+              ctx.strokeRect(cx - 180, by - 60, 360, 45);
+              
+              // Text
+              ctx.fillStyle = stepColor;
+              ctx.textAlign = 'center';
+              ctx.fillText(instruction, cx, by - 44);
+              ctx.fillStyle = '#ffffff';
+              ctx.font = '700 9px "JetBrains Mono", monospace';
+              ctx.fillText(subInstruction.toUpperCase(), cx, by - 26);
+              
+              // Draw arrows or blinking indicators
+              const pulseAnim = (Math.sin(performance.now() / 150) + 1) / 2; // Fast blinking
+              if (currentEnrollmentStep === 'left') {
+                // Draw a big cyan flashing left arrow on the left side of the screen
+                ctx.font = '700 48px "JetBrains Mono", monospace';
+                ctx.fillStyle = `rgba(6, 182, 212, ${0.3 + pulseAnim * 0.7})`;
+                ctx.fillText("<<<<<", cx - 220, cy);
+              } else if (currentEnrollmentStep === 'right') {
+                // Draw a big purple flashing right arrow on the right side of the screen
+                ctx.font = '700 48px "JetBrains Mono", monospace';
+                ctx.fillStyle = `rgba(139, 92, 246, ${0.3 + pulseAnim * 0.7})`;
+                ctx.fillText(">>>>>", cx + 220, cy);
+              } else if (currentEnrollmentStep === 'liveness') {
+                // Draw a blinking reminder under the oval
+                ctx.font = '700 14px "JetBrains Mono", monospace';
+                ctx.fillStyle = `rgba(245, 158, 11, ${0.3 + pulseAnim * 0.7})`;
+                ctx.fillText("👀 PARPADEA AHORA 👀", cx, cy + 180);
+              }
+              
+              ctx.restore();
+            }
           }
         }
 
