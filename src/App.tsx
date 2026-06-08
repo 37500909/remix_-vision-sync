@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { Camera, Square, Play, Music, Loader2, AlertCircle, Key, Activity, Cpu, ScanFace, Info, X } from 'lucide-react';
+import { Camera, Square, Play, Music, Loader2, AlertCircle, Key, Activity, Cpu, ScanFace, Info, X, Users, Trash2, Edit2, ShieldAlert } from 'lucide-react';
 import * as tf from '@tensorflow/tfjs';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
@@ -458,6 +458,91 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [isDatabaseOpen, setIsDatabaseOpen] = useState(false);
+  const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editDni, setEditDni] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
+  const [dbSearch, setDbSearch] = useState('');
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/users');
+      const data = await res.json();
+      if (data.users) {
+        setRegisteredUsers(data.users);
+      }
+    } catch (e) {
+      console.error("Error fetching users:", e);
+    }
+  };
+
+  const deleteUser = async (userId: number) => {
+    if (!confirm("¿Estás seguro de que deseas eliminar este registro biométrico? Esta acción borrará todas sus imágenes asociadas.")) return;
+    try {
+      const res = await fetch(`http://localhost:5000/users/${userId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchUsers();
+        fetchLogs();
+      }
+    } catch (e) {
+      console.error("Error deleting user:", e);
+    }
+  };
+
+  const saveEditedUser = async () => {
+    if (!editingUser) return;
+    try {
+      const res = await fetch(`http://localhost:5000/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: editFirstName,
+          last_name: editLastName,
+          dni: editDni,
+          status: editStatus
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditingUser(null);
+        fetchUsers();
+        fetchLogs();
+      } else {
+        alert(data.error || "Error al actualizar");
+      }
+    } catch (e) {
+      console.error("Error updating user:", e);
+    }
+  };
+
+  const toggleUserStatus = async (user: any) => {
+    const newStatus = user.status === 'blocked' ? 'active' : 'blocked';
+    try {
+      const res = await fetch(`http://localhost:5000/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: user.first_name,
+          last_name: user.last_name,
+          dni: user.dni,
+          status: newStatus
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchUsers();
+        fetchLogs();
+      }
+    } catch (e) {
+      console.error("Error toggling user status:", e);
+    }
+  };
   const [consoleState, setConsoleState] = useState({
     emotion: 'neutral',
     objects: [] as string[],
@@ -507,7 +592,7 @@ export default function App() {
   const analysisEngineRef = useRef<'mediapipe' | 'deepface'>('mediapipe');
   const deepFaceEmotionRef = useRef<string>('neutral');
   const identityRef = useRef<string>('Unknown');
-  const deepFaceBoxesRef = useRef<{ x: number; y: number; w: number; h: number; identity: string; dni: string; age: number; gender: string; emotion: string; opacity: number }[]>([]);
+  const deepFaceBoxesRef = useRef<{ x: number; y: number; w: number; h: number; identity: string; dni: string; age: number; gender: string; emotion: string; status: string; opacity: number }[]>([]);
   const lastDeepFaceTimeRef = useRef<number>(0);
   const localFaceDetectedRef = useRef<boolean>(false);
 
@@ -1139,9 +1224,9 @@ export default function App() {
                 if (data.results && data.results.length > 0) {
                   setIsFaceDetected(true);
                   
-                  // Filter out active users (recognized ones)
+                  // Filter out active users (recognized ones and not blocked)
                   const detectedUsers = data.results
-                    .filter((face: any) => face.identity !== 'Unknown')
+                    .filter((face: any) => face.identity !== 'Unknown' && face.status !== 'blocked')
                     .map((face: any) => ({ name: face.identity, dni: face.dni }));
                   setActiveUsers(detectedUsers);
                   
@@ -1194,6 +1279,7 @@ export default function App() {
                     age: face.age,
                     gender: face.dominant_gender,
                     emotion: face.dominant_emotion,
+                    status: face.status || 'active',
                     opacity: 1.0
                   }));
                 } else {
@@ -1293,18 +1379,28 @@ export default function App() {
           // Draw Bounding Boxes for DeepFace on main canvas
           deepFaceBoxesRef.current.forEach((box) => {
             if (box.opacity <= 0) return;
-            const { x, y, w, h, identity, dni, opacity } = box;
+            const { x, y, w, h, identity, dni, status, opacity } = box;
             
             const isUnknown = identity === 'Unknown';
+            const isBlocked = status === 'blocked';
             
             // Check if this box is the selected one
             const isSelected = selectedFace && 
               Math.abs(selectedFace.x - x) < 20 && 
               Math.abs(selectedFace.y - y) < 20;
 
-            // Glowing green for authorized (recognized), warning yellow for unrecognized, bright blue for selected
-            let boxColor = isUnknown ? `rgba(234, 179, 8, ${opacity})` : `rgba(74, 222, 128, ${opacity})`;
-            let bgBoxColor = isUnknown ? `rgba(234, 179, 8, ${opacity * 0.15})` : `rgba(74, 222, 128, ${opacity * 0.15})`;
+            // Glowing green for authorized (recognized), warning yellow for unrecognized, bright blue for selected, red for blocked
+            let boxColor = isUnknown 
+              ? `rgba(234, 179, 8, ${opacity})` 
+              : isBlocked 
+                ? `rgba(239, 68, 68, ${opacity})` 
+                : `rgba(74, 222, 128, ${opacity})`;
+                
+            let bgBoxColor = isUnknown 
+              ? `rgba(234, 179, 8, ${opacity * 0.15})` 
+              : isBlocked 
+                ? `rgba(239, 68, 68, ${opacity * 0.15})` 
+                : `rgba(74, 222, 128, ${opacity * 0.15})`;
             
             if (isSelected) {
               boxColor = `rgba(59, 130, 246, ${opacity})`; // Blue
@@ -1346,6 +1442,11 @@ export default function App() {
             ctx.font = '700 9px "JetBrains Mono", monospace';
             let labelText = isUnknown ? "CABEZA (Sujeto Desconocido)" : `CABEZA: ${identity.toUpperCase()}`;
             let subLabelText = isUnknown ? "BLOQUE CABEZA - NO AUTORIZADO" : `DNI: ${dni || 'S/D'} (AUTORIZADO)`;
+            
+            if (isBlocked && !isUnknown) {
+              labelText = `CABEZA: ${identity.toUpperCase()} (BLOQUEADO)`;
+              subLabelText = "ACCESO DENEGADO - BLOQUEADO POR SEGURIDAD";
+            }
             
             if (isSelected) {
               labelText = "CABEZA: REGISTRANDO SUJETO...";
@@ -2085,6 +2186,14 @@ export default function App() {
                     >
                       <Info className="w-5 h-5 text-white" />
                     </button>
+                    <button 
+                      onClick={() => { playHoverSound(); setIsDatabaseOpen(true); fetchUsers(); }}
+                      onMouseEnter={playHoverSound}
+                      className="p-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-full transition-colors backdrop-blur-md border border-blue-500/40 shrink-0 relative"
+                      title="Directorio Biométrico / Sujetos"
+                    >
+                      <Users className="w-5 h-5 text-blue-400" />
+                    </button>
                   </div>
                 </div>
                 <div className="text-xs font-mono text-white/80 flex items-center gap-2 bg-black/40 backdrop-blur px-3 py-1.5 border border-white/20">
@@ -2596,6 +2705,244 @@ export default function App() {
                 <p className="text-xs text-white/50 mt-4 pt-4 border-t border-white/10">
                   Nota: Todo el procesamiento ocurre de forma local en tu navegador o mediante llamadas seguras a la API. No se guarda ni se transmite ningún dato de video.
                 </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Subject Database Modal */}
+      <AnimatePresence>
+        {isDatabaseOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm pointer-events-auto font-mono text-xs"
+            onClick={() => {
+              setIsDatabaseOpen(false);
+              setEditingUser(null);
+            }}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-zinc-950 border border-blue-500/50 p-6 max-w-4xl w-full shadow-[0_0_50px_rgba(59,130,246,0.2)] relative max-h-[85vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4 mb-4 border-b border-white/10 pb-3 shrink-0">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-400" />
+                  DIRECTORIO BIOMÉTRICO / REGISTRO DE SUJETOS
+                </h2>
+                <button 
+                  onClick={() => {
+                    setIsDatabaseOpen(false);
+                    setEditingUser(null);
+                  }}
+                  className="p-1.5 border border-white/20 bg-black/50 hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Editing User Sub-Panel */}
+              {editingUser && (
+                <div className="bg-blue-500/5 border border-blue-500/30 p-4 mb-4 shrink-0 flex flex-col gap-3">
+                  <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">[EDITAR PERFIL BIOMÉTRICO]</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-white/40">NOMBRE</span>
+                      <input 
+                        type="text" 
+                        value={editFirstName} 
+                        onChange={e => setEditFirstName(e.target.value)} 
+                        className="bg-black text-white border border-white/20 p-2 text-xs uppercase"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-white/40">APELLIDO</span>
+                      <input 
+                        type="text" 
+                        value={editLastName} 
+                        onChange={e => setEditLastName(e.target.value)} 
+                        className="bg-black text-white border border-white/20 p-2 text-xs uppercase"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-white/40">DNI</span>
+                      <input 
+                        type="text" 
+                        value={editDni} 
+                        onChange={e => setEditDni(e.target.value)} 
+                        className="bg-black text-white border border-white/20 p-2 text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-white/40">ESTADO DE ACCESO</span>
+                      <select 
+                        value={editStatus} 
+                        onChange={e => setEditStatus(e.target.value)} 
+                        className="bg-black text-white border border-white/20 p-2 text-xs cursor-pointer focus:outline-none"
+                      >
+                        <option value="active">AUTORIZADO (ACTIVO)</option>
+                        <option value="blocked">DENEGADO (BLOQUEADO)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-1">
+                    <button 
+                      onClick={() => setEditingUser(null)}
+                      className="px-3 py-1.5 border border-white/20 hover:bg-white/10 text-white font-bold text-[10px] uppercase cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      onClick={saveEditedUser}
+                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] uppercase cursor-pointer"
+                    >
+                      Guardar Cambios
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Search Bar */}
+              <div className="mb-4 shrink-0">
+                <input 
+                  type="text" 
+                  placeholder="FILTRAR POR NOMBRE, APELLIDO O DNI..." 
+                  value={dbSearch} 
+                  onChange={e => setDbSearch(e.target.value)}
+                  className="w-full bg-black/60 text-white border border-white/20 p-2 text-xs tracking-wider placeholder-white/30 uppercase focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+
+              {/* List Header */}
+              <div className="flex-1 overflow-y-auto border border-white/10 bg-black/40 min-h-[200px]">
+                <div className="grid grid-cols-12 gap-2 p-2.5 bg-white/5 border-b border-white/10 text-[9px] text-white/40 font-bold uppercase tracking-widest shrink-0 hidden sm:grid">
+                  <div className="col-span-1">ID</div>
+                  <div className="col-span-2">FOTO REGISTRO</div>
+                  <div className="col-span-3">SUJETO (APELLIDO, NOMBRE)</div>
+                  <div className="col-span-2">DNI</div>
+                  <div className="col-span-2">ÚLTIMO INGRESO</div>
+                  <div className="col-span-2 text-right">ACCIONES</div>
+                </div>
+
+                {/* Users List */}
+                {registeredUsers.length === 0 ? (
+                  <div className="text-center text-white/30 py-8 italic shrink-0">
+                    SISTEMA.SIN_SUJETOS_REGISTRADOS
+                  </div>
+                ) : (
+                  registeredUsers
+                    .filter(user => {
+                      const searchStr = `${user.first_name} ${user.last_name} ${user.dni}`.toLowerCase();
+                      return searchStr.includes(dbSearch.toLowerCase());
+                    })
+                    .map(user => {
+                      const nameFormatted = `${user.last_name.replace(/_/g, ' ')}, ${user.first_name.replace(/_/g, ' ')}`;
+                      const isBlocked = user.status === 'blocked';
+                      
+                      return (
+                        <div 
+                          key={user.id} 
+                          className={`grid grid-cols-12 gap-2 p-3 border-b border-white/5 items-center hover:bg-white/[0.02] transition-colors text-white/90 text-xs`}
+                        >
+                          {/* ID */}
+                          <div className="col-span-12 sm:col-span-1 text-[10px] text-white/40 font-mono">
+                            #{user.id}
+                          </div>
+
+                          {/* Foto Registro */}
+                          <div className="col-span-6 sm:col-span-2 flex items-center gap-2">
+                            <span className="sm:hidden text-[8px] text-white/40 uppercase font-bold">Registro:</span>
+                            <img 
+                              src={`http://localhost:5000/db/${user.first_name}_${user.last_name}_1.jpg`} 
+                              alt="Reg" 
+                              className="w-12 h-12 object-cover border border-white/20"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://placehold.co/100x100?text=S/F";
+                              }}
+                            />
+                          </div>
+
+                          {/* Último Ingreso Preview */}
+                          <div className="col-span-6 sm:col-span-2 flex items-center gap-2 sm:order-5">
+                            <span className="sm:hidden text-[8px] text-white/40 uppercase font-bold">Últ. Scan:</span>
+                            <div className="w-12 h-12 border border-white/20 bg-black flex items-center justify-center relative overflow-hidden">
+                              {user.last_access ? (
+                                <img 
+                                  src={`http://localhost:5000/db/logs/${user.id}.jpg?t=${new Date(user.last_access).getTime()}`} 
+                                  alt="Access" 
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-[7px] text-white/30 text-center font-sans">S/C</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Nombre */}
+                          <div className="col-span-12 sm:col-span-3 font-sans font-bold uppercase tracking-wide truncate">
+                            {nameFormatted}
+                          </div>
+
+                          {/* DNI */}
+                          <div className="col-span-12 sm:col-span-2 font-mono text-white/80">
+                            <span className="sm:hidden text-[8px] text-white/40 uppercase font-bold mr-1">DNI:</span>
+                            {user.dni || 'S/D'}
+                          </div>
+
+                          {/* Info check-in & Status */}
+                          <div className="col-span-12 sm:col-span-2 flex flex-col gap-1 sm:order-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-none ${isBlocked ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.8)]' : 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.8)]'}`} />
+                              <button 
+                                onClick={() => toggleUserStatus(user)}
+                                className={`text-[9px] font-bold uppercase tracking-widest underline decoration-dashed hover:text-white cursor-pointer ${isBlocked ? 'text-red-400' : 'text-green-400'}`}
+                                title="Haga clic para cambiar el estado"
+                              >
+                                {isBlocked ? 'BLOQUEADO' : 'AUTORIZADO'}
+                              </button>
+                            </div>
+                            <span className="text-[8px] text-white/40 uppercase font-mono">
+                              {user.last_access ? user.last_access.split(' ')[1] : 'SIN INGRESO'}
+                            </span>
+                          </div>
+
+                          {/* Acciones */}
+                          <div className="col-span-12 sm:col-span-2 flex justify-end gap-1.5 sm:order-6">
+                            <button 
+                              onClick={() => {
+                                setEditingUser(user);
+                                setEditFirstName(user.first_name);
+                                setEditLastName(user.last_name);
+                                setEditDni(user.dni || '');
+                                setEditStatus(user.status || 'active');
+                              }}
+                              className="p-1 border border-white/20 hover:border-blue-500/50 hover:bg-blue-500/10 text-white/60 hover:text-blue-400 transition-all cursor-pointer"
+                              title="Editar datos del sujeto"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => deleteUser(user.id)}
+                              className="p-1 border border-white/20 hover:border-red-500/50 hover:bg-red-500/10 text-white/60 hover:text-red-400 transition-all cursor-pointer"
+                              title="Eliminar sujeto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
               </div>
             </motion.div>
           </motion.div>
